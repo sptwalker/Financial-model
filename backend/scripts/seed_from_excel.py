@@ -22,10 +22,39 @@ from app.engine.excel_import import import_xls  # noqa: E402
 from app.engine.calculator import run, Params  # noqa: E402
 from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.models.financial import Scenario, ModelVersion, Cell  # noqa: E402
+from app.models.forecast import SalesActual  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 XLS = BACKEND_DIR.parent / "docs" / "现金流测算 2026.8.xls"
 PAYROLL_XLSX = BACKEND_DIR.parent / "docs" / "2026年7月创想悦动工资表.xlsx"
+
+# 已发生月（发售起点 2026-07 起）；真实销量到位后逐月追加，预测只从 sales_actuals 读历史
+ACTUAL_MONTHS = ["2026-07", "2026-08"]
+
+
+def seed_actuals(db) -> int:
+    """从「中性」v1 网格取已发生月 qty.online/offline → sales_actuals（幂等 upsert，source=seed）"""
+    scenario = db.query(Scenario).filter(Scenario.name == "中性").first()
+    if not scenario:
+        return 0
+    rows = (db.query(Cell)
+            .filter(Cell.scenario_id == scenario.id, Cell.model_version == 1,
+                    Cell.row_key.in_(["qty.online", "qty.offline"]),
+                    Cell.period.in_(ACTUAL_MONTHS)).all())
+    n = 0
+    for c in rows:
+        channel = "online" if c.row_key == "qty.online" else "offline"
+        existing = (db.query(SalesActual)
+                    .filter(SalesActual.period == c.period,
+                            SalesActual.channel == channel).first())
+        if existing:
+            existing.units, existing.source = c.value, "seed"
+        else:
+            db.add(SalesActual(period=c.period, channel=channel, units=c.value,
+                               source="seed", note="发售起点种子"))
+        n += 1
+    db.commit()
+    return n
 
 
 def payroll_total_payable(xlsx: Path) -> Decimal:
@@ -94,6 +123,8 @@ def main():
         db.commit()
         print(f"已写入：情景「中性」版本 1，{len(cells)} 个单元格，"
               f"期间 {periods[0]}..{periods[-1]}（{len(periods)} 期）")
+        n_actual = seed_actuals(db)
+        print(f"已写入：sales_actuals {n_actual} 条（{'/'.join(ACTUAL_MONTHS)} × 线上/线下）")
     finally:
         db.close()
 

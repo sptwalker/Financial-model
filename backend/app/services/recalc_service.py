@@ -72,14 +72,18 @@ def rebuild_inputs(cells: list[Cell]) -> dict[str, dict[str, Decimal]]:
 
 
 def recalc(db: Session, scenario_id: int, params_override: dict | None = None,
-           comment: str | None = None, user_id: int | None = None) -> dict:
+           comment: str | None = None, user_id: int | None = None,
+           inputs_override: dict | None = None) -> dict:
     """核心：加载情景 + 最新版本 → 快照合并 → 重算 → 持久化新版本 → 返回摘要
 
     并发安全：版本号冲突（两人同时基于 vN 重算）时重读最新版本重试，最多 3 次。
+    inputs_override: {row_key: {period: Decimal}} 直接覆写输入行（预测回填 qty 用），
+    随 inputs_json 快照持久 → 回填是粘性的。
     """
     for _ in range(3):
         try:
-            return _recalc_once(db, scenario_id, params_override, comment, user_id)
+            return _recalc_once(db, scenario_id, params_override, comment, user_id,
+                                inputs_override)
         except ValueError as e:
             if str(e) in ("version_conflict_retry", "db_locked_retry"):
                 continue
@@ -88,7 +92,8 @@ def recalc(db: Session, scenario_id: int, params_override: dict | None = None,
 
 
 def _recalc_once(db: Session, scenario_id: int, params_override: dict | None,
-                 comment: str | None, user_id: int | None) -> dict:
+                 comment: str | None, user_id: int | None,
+                 inputs_override: dict | None = None) -> dict:
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     if not scenario:
         raise ValueError("scenario_not_found")
@@ -119,6 +124,10 @@ def _recalc_once(db: Session, scenario_id: int, params_override: dict | None,
                     continue
     if not inputs:
         raise ValueError("no_input_cells")
+
+    # 预测回填等：直接覆写输入行（qty.online/offline），并入 inputs_json 快照 → 粘性
+    for rk, per in (inputs_override or {}).items():
+        inputs.setdefault(rk, {}).update({p: _coerce_decimal(v) for p, v in per.items()})
 
     # periods 取该版本单元格覆盖的期间全集（原引擎 2026-07..2029-12 连续月度）
     periods = sorted({c.period for c in cells})

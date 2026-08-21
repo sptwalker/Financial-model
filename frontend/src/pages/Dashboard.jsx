@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
+import ThreeScenarioCard from '../components/ThreeScenarioCard'
 import { fmt, getGrid, getVersions, listScenarios, putCells, recalc } from '../api'
 import { ROW_GROUPS, rowInfo, CASH_COLORS } from '../rows'
 
@@ -210,6 +211,8 @@ export default function Dashboard({ user, onLogout }) {
             <h2>现金流水</h2>
             <Chart option={cashOption} height={300} />
           </section>
+
+          <ThreeScenarioCard scenarioId={scenarioId} />
 
           <section className="card">
             <h2>全部指标</h2>

@@ -5,9 +5,9 @@ from app.core.config import get_settings
 from app.db.session import engine
 from app.db.base import Base
 from app.models import (  # noqa: F401  确保模型注册到 metadata
-    User, OperationLog, Scenario, ModelVersion, Cell,
+    User, OperationLog, Scenario, ModelVersion, Cell, SalesActual, ForecastRun,
 )
-from app.api.v1 import auth, users, scenarios
+from app.api.v1 import auth, users, scenarios, forecast
 
 settings = get_settings()
 
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(scenarios.router, prefix="/api/v1")
+app.include_router(forecast.router, prefix="/api/v1")
 
 
 @app.on_event("startup")

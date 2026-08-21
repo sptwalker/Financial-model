@@ -96,3 +96,18 @@ export const CASH_COLORS = {
   'sale.accessory.amount': '#f6bd16',
   'sale.subscription.amount': '#9254de',
 }
+
+// 预测方法阶梯（与后端 forecast_service.MIN_* 门槛一致；min=解锁所需有效历史月数）
+export const FORECAST_METHODS = [
+  { key: 'plan_anchored', label: '计划锚定', min: 0, hint: '以计划曲线为形状，实际出货校准水平' },
+  { key: 'seasonal_naive', label: '季节朴素', min: 12, hint: '同月最近一次观测' },
+  { key: 'holt_winters', label: 'Holt-Winters', min: 24, hint: '三重指数平滑（需安装 statsmodels）' },
+  { key: 'sarima', label: 'SARIMA', min: 36, hint: '差分自回归（未启用）' },
+]
+
+// 三情景配色（看板对比 / 预测页共用）
+export const SCENARIO_COLORS = {
+  base: '#4f8cff',
+  lower: '#f6bd16',
+  upper: '#00b578',
+}
