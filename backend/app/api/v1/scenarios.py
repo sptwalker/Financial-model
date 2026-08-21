@@ -91,19 +91,60 @@ def delete_scenario(scenario_id: int, db: Session = Depends(get_db),
 @router.get("/{scenario_id}/versions")
 def list_versions(scenario_id: int, db: Session = Depends(get_db),
                   current_user=Depends(get_current_user)):
-    """情景的模型版本列表（最新在前），附最新版参数快照"""
+    """情景的模型版本列表（最新在前），附最新版参数快照与已发布状态"""
     latest = (db.query(ModelVersion)
               .filter(ModelVersion.scenario_id == scenario_id)
               .order_by(ModelVersion.version_no.desc()).first())
     versions = [
         {"version_no": v.version_no, "comment": v.comment, "source": v.source,
-         "created_at": v.created_at.isoformat() if v.created_at else None}
+         "created_at": v.created_at.isoformat() if v.created_at else None,
+         "released_at": v.released_at.isoformat() if v.released_at else None,
+         "released_by": v.released_by}
         for v in db.query(ModelVersion)
         .filter(ModelVersion.scenario_id == scenario_id)
         .order_by(ModelVersion.version_no.desc()).all()
     ]
     return {"scenario_id": scenario_id, "versions": versions,
             "params": json.loads(latest.params_json) if latest and latest.params_json else None}
+
+
+@router.post("/{scenario_id}/versions/{version_no}/release")
+def release_version(scenario_id: int, version_no: int, db: Session = Depends(get_db),
+                    current_user=Depends(get_current_user)):
+    """发布版本（仅 admin）——软冻结：标记已发布，可复盘可撤销，不阻断编辑"""
+    PermissionChecker.require_admin(current_user)
+    version = (db.query(ModelVersion)
+               .filter(ModelVersion.scenario_id == scenario_id,
+                       ModelVersion.version_no == version_no).first())
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    from datetime import datetime
+    version.released_at = datetime.now()
+    version.released_by = current_user.id
+    db.commit()
+    OperationLogService.log(db, action="version.release",
+                            description=f"发布情景 {scenario_id} 版本 v{version_no}",
+                            user_id=current_user.id)
+    return {"ok": True, "version_no": version_no, "released": True}
+
+
+@router.post("/{scenario_id}/versions/{version_no}/unrelease")
+def unrelease_version(scenario_id: int, version_no: int, db: Session = Depends(get_db),
+                      current_user=Depends(get_current_user)):
+    """撤销发布（仅 admin）——恢复为草稿状态"""
+    PermissionChecker.require_admin(current_user)
+    version = (db.query(ModelVersion)
+               .filter(ModelVersion.scenario_id == scenario_id,
+                       ModelVersion.version_no == version_no).first())
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    version.released_at = None
+    version.released_by = None
+    db.commit()
+    OperationLogService.log(db, action="version.unrelease",
+                            description=f"撤销发布 情景 {scenario_id} 版本 v{version_no}",
+                            user_id=current_user.id)
+    return {"ok": True, "version_no": version_no, "released": False}
 
 
 # ---------- 重算 ----------

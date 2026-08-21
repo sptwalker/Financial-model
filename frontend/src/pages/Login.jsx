@@ -1,9 +1,31 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { feishuAuthorizeUrl, devLogin } from '../api'
 
 export default function Login({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState(null)
+
+  // 飞书回调落地：/login?access_token=...&user=... → 存储后清 URL 进入系统
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const error = params.get('error')
+    if (error) {
+      setErr(error)
+      window.history.replaceState({}, '', '/login')
+      return
+    }
+    const token = params.get('access_token')
+    if (!token) return
+    try {
+      const user = JSON.parse(params.get('user'))
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(user))
+      window.history.replaceState({}, '', '/login')
+      onLogin(user)
+    } catch (e) {
+      setErr('登录信息解析失败，请重试')
+    }
+  }, [onLogin])
 
   const enter = async () => {
     try {

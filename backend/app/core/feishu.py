@@ -68,8 +68,8 @@ class FeishuClient:
             raise FeishuAuthError(f"Failed to get app access token: {data.get('msg')}")
         return data["app_access_token"]
 
-    async def get_user_access_token(self, code: str) -> Dict[str, Any]:
-        """通过 authorization code 获取用户 access token"""
+    async def get_user_access_token(self, code: str) -> str:
+        """通过 authorization code 获取用户 access token（返回令牌字符串）"""
         app_token = await self.get_app_access_token()
 
         client = self._get_client()
@@ -88,7 +88,7 @@ class FeishuClient:
         data = response.json()
         if data.get("code") != 0:
             raise FeishuAuthError(f"Failed to get user access token: {data.get('msg')}")
-        return data["data"]
+        return data["data"]["access_token"]
 
     async def get_user_info(self, user_access_token: str) -> Dict[str, Any]:
         """获取用户信息"""

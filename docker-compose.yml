@@ -1,0 +1,60 @@
+# 内测部署（阶段4）— postgres + api + nginx，HTTP:80 局域网访问
+# 仓库根 .env 提供：POSTGRES_PASSWORD / SECRET_KEY / FEISHU_APP_ID / FEISHU_APP_SECRET
+# 用法：docker compose up -d --build；停止：docker compose down（数据保留在 pgdata 卷）
+name: fm
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fmuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在仓库根 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: financial_model
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fmuser -d financial_model"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DEBUG: "false"
+      ENABLE_DEV_LOGIN: "false"
+      DATABASE_URL: postgresql+psycopg2://fmuser:${POSTGRES_PASSWORD}@postgres:5432/financial_model
+      SECRET_KEY: ${SECRET_KEY:?请在仓库根 .env 设置 SECRET_KEY}
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+      FEISHU_REDIRECT_URI: ${FEISHU_REDIRECT_URI:-http://172.28.252.38/api/v1/auth/feishu/callback}
+      FRONTEND_URL: ${FRONTEND_URL:-http://172.28.252.38}
+    volumes:
+      # 只读挂载本机 SQLite 数据（一次迁移种子源；迁移幂等，可安全重启）
+      - ./backend/data:/mnt/sqlite-data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:

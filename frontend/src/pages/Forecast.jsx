@@ -87,7 +87,7 @@ export default function Forecast({ user }) {
         horizon,
       })
       setRun(res)
-      setMsg(`${res.method}（有效历史 ${res.n_actual} 个月）· 线上占比 ${fmt(Number(res.ratio_online), 1)}%`)
+      setMsg(`${res.method}（有效历史 ${res.n_actual} 个月）· 线上占比 ${fmt(Number(res.ratio_online) * 100, 1)}%`)
     } catch (e) {
       setErr(String(e.response?.data?.detail || e.message))
     } finally {

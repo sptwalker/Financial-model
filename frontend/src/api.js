@@ -59,6 +59,16 @@ export async function recalc(scenarioId, payload = {}) {
   return data
 }
 
+export async function releaseVersion(scenarioId, versionNo) {
+  const { data } = await api.post(`/scenarios/${scenarioId}/versions/${versionNo}/release`)
+  return data
+}
+
+export async function unreleaseVersion(scenarioId, versionNo) {
+  const { data } = await api.post(`/scenarios/${scenarioId}/versions/${versionNo}/unrelease`)
+  return data
+}
+
 // ---------- 预测（阶段 3） ----------
 
 export async function listActuals() {

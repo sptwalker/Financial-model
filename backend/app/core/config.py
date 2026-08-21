@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 from functools import lru_cache
 from pathlib import Path
 
@@ -43,9 +44,24 @@ class Settings(BaseSettings):
     PERIOD_START: str = "2026-08"
     PERIOD_END: str = "2029-12"
 
+    # 开发模拟登录开关（生产 compose 置 false，双保险关闭 dev-login）
+    ENABLE_DEV_LOGIN: bool = True
+
     class Config:
         env_file = Path(__file__).resolve().parent.parent / ".env"
         case_sensitive = True
+
+    @model_validator(mode="after")
+    def _guard_secret_key(self):
+        """生产环境（DEBUG=false）必须覆盖 dev-only 默认 SECRET_KEY，否则拒绝启动。"""
+        if not self.DEBUG and (
+            not self.SECRET_KEY
+            or self.SECRET_KEY == "dev-only-secret-key-please-override-in-production-0123456789"
+        ):
+            raise ValueError(
+                "生产环境必须通过环境变量覆盖 SECRET_KEY（见 backend/.env.example）"
+            )
+        return self
 
 
 @lru_cache()

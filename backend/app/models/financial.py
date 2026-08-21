@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Boolean, Integer, UniqueConstraint
+from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, UniqueConstraint
 from app.models.base import BaseModel
 
 
@@ -23,6 +23,8 @@ class ModelVersion(BaseModel):
     params_json = Column(Text, comment="引擎参数快照（JSON，Decimal 序列化为字符串）")
     inputs_json = Column(Text, comment="引擎输入快照（{row_key: {period: 值}}，重算基线）")
     created_by = Column(Integer, comment="创建人用户ID")
+    released_at = Column(DateTime, nullable=True, comment="发布时间（非空=已发布；软冻结，可撤销）")
+    released_by = Column(Integer, nullable=True, comment="发布人用户ID")
 
     __table_args__ = (UniqueConstraint("scenario_id", "version_no", name="uq_model_version"),)
 

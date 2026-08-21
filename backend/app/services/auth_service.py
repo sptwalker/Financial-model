@@ -55,15 +55,15 @@ class AuthService:
         )
         return self._issue_tokens(user)
 
-    async def refresh(self, refresh_token: str) -> str:
-        """刷新令牌 → 新 access token（失败抛 401）"""
+    async def refresh(self, refresh_token: str) -> LoginResponse:
+        """刷新令牌 → 完整登录响应（含用户信息，与登录流程一致）"""
         payload = verify_token(refresh_token)
         if not payload or payload.get("type") != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="刷新令牌无效")
         user = UserService.get_by_id(self.db, int(payload["sub"]))
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
-        return create_access_token({"sub": str(user.id)})
+        return self._issue_tokens(user)
 
     def _issue_tokens(self, user: User) -> LoginResponse:
         return LoginResponse(
