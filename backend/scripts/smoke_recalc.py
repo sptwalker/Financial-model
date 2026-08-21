@@ -39,7 +39,7 @@ def main():
         assert abs(sale_new / sale_old - Decimal("1999") / Decimal("1799")) < Decimal("1e-4")
         # 输入行与未受影响行应保持不变
         assert v3["qty.online|2026-08"] == v2["qty.online|2026-08"]
-        assert v3["exp.salary|2026-07"] == v2["exp.salary|2026-07"]
+        assert v3["exp.salary|2026-08"] == v2["exp.salary|2026-08"]
         print("全部断言通过")
     finally:
         db.close()

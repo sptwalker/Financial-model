@@ -114,7 +114,7 @@ def test_run_forecast_endpoint(client, auth):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["method"] == "plan_anchored"
-    assert len(body["series"]) == 18
+    assert len(body["series"]) == 17
     pt = body["series"][0]
     assert isinstance(pt["yhat"], str)               # Decimal 序列化为字符串（不丢精度）
     assert set(pt) >= {"period", "yhat", "lower", "upper", "online", "offline"}

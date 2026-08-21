@@ -5,8 +5,9 @@
 - 参数区（第 1-10 行）→ Params
 - 数据区（第 12 行起，第 0 列=项目名，第 1 列=子项名）
 - 列映射：2026年=7-12月（第 2-7 列）、2027年=1-12月（第 8-19 列）、2028/2029=全年（第 20/21 列）
+- 引擎期间轴 2026-08 起（2026-07 为已发生月，由 seed 按财务报表实际值单独锚定）
 - 2028/2029 全年值写入该年 12 月作为年度目标行（引擎按季节曲线月度化）
-- 2026-07/08 为实际值（引擎对账基准）；2026-09 起公式应用
+- 2026-08 为已发生月（引擎对账基准）；2026-09 起公式应用
 
 返回 {
   "params": Params,
@@ -92,7 +93,11 @@ def _norm(s) -> str:
 
 
 def periods_map() -> list[str]:
-    """主表列 → 期间：2026-07..2026-12, 2027-01..2027-12, 2028-全年, 2029-全年"""
+    """主表列 → 期间标签：2026-07..2026-12, 2027-01..2027-12, 2028-全年, 2029-全年
+
+    列 2 = 2026-07（已发生月，seed 锚定报表实际值）；列 3 = 2026-08、列 4 =
+    2026-09、… 列 19 = 2027-12；列 20/21 = 2028/2029 全年。
+    """
     return ([f"2026-{m:02d}" for m in range(7, 13)]
             + [f"2027-{m:02d}" for m in range(1, 13)]
             + ["2028-12", "2029-12"])
@@ -103,6 +108,8 @@ def parse_main_sheet(book: xlrd.book.Book, sheet_name: str) -> dict:
     ws = book.sheet_by_name(sheet_name)
     periods = periods_map()
     n_cols = 22  # 0=项目, 1=子项, 2..19=月度, 20/21=全年
+    # 引擎期间轴从 2026-08 起 → 列标签与列数据同步右移一列（periods[1:] 与 vals[1:] 对齐）
+    period_cols = periods[1:]
 
     inputs: dict[str, dict[str, Decimal]] = {}
     excel: dict[str, dict[str, Decimal]] = {}
@@ -120,12 +127,14 @@ def parse_main_sheet(book: xlrd.book.Book, sheet_name: str) -> dict:
         if not sub:
             continue
         vals = [_num(ws.cell_value(r, c)) for c in range(2, n_cols)]
+        # 列 2 = 2026-07（已发生月，不进入引擎轴）；引擎期间从列 3 起 → 数据与标签同步右移一列
+        vals = vals[1:]
 
         # 费用行（费用支出组下，标签在第 1 列；2028/2029 全年值 → 该年 12 月槽）
         if group == "费用支出":
             for exp_label, row_key in EXPENSE_LABELS:
                 if sub == exp_label:
-                    for p, v in zip(periods, vals):
+                    for p, v in zip(period_cols, vals):
                         if v is not None:
                             inputs.setdefault(row_key, {})[p] = v
                             excel.setdefault(row_key, {})[p] = v
@@ -143,7 +152,7 @@ def parse_main_sheet(book: xlrd.book.Book, sheet_name: str) -> dict:
             continue
         if sub in ("线上", "线下") and not skip_qty:
             key = "qty.online" if sub == "线上" else "qty.offline"
-            for p, v in zip(periods, vals):
+            for p, v in zip(period_cols, vals):
                 if v is not None:
                     inputs.setdefault(key, {})[p] = v
                     excel.setdefault(key, {})[p] = v
@@ -165,12 +174,12 @@ def parse_main_sheet(book: xlrd.book.Book, sheet_name: str) -> dict:
 
         key = LABEL_MAP.get((group, sub))
         if key:
-            for p, v in zip(periods, vals):
+            for p, v in zip(period_cols, vals):
                 if v is not None:
                     excel.setdefault(key, {})[p] = v
             # 期初现金：逐月直接输入（2028/2029 列为引用值，忽略）
             if key == "cash.opening":
-                for p, v in zip(periods, vals):
+                for p, v in zip(period_cols, vals):
                     if v is not None:
                         inputs.setdefault(key, {})[p] = v
 
@@ -214,5 +223,5 @@ def import_xls(path: str | Path) -> dict:
         main_name = book.sheet_names()[0]
     result = parse_main_sheet(book, main_name)
     result["params"] = parse_params(book, main_name)
-    result["periods"] = periods_between("2026-07", "2029-12")
+    result["periods"] = periods_between("2026-08", "2029-12")
     return result

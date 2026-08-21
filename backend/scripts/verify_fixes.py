@@ -4,10 +4,10 @@
 对账口径（已从 Excel 拆解确认）：
 - Excel 线上/线下销售行 = 硬件销售 + 配件收入（引擎侧合并比较）
 - Excel 销售额合计 = 线上+线下，不含订阅（订阅为独立 sheet，按用户确认口径=累计装机×0.7×200）
-- 渠道佣金：Excel 08 起逐月有值 → 导入直通；07 空白走引擎兜底（上月线下含配件×5%）
+- 渠道佣金：Excel 08 起逐月有值 → 全部导入直通（引擎兜底=上月线下含配件×5% 仅用于空月）
 - 采购付款：引擎 N+2；Excel 09/10 配件采购为已知瑕疵（N+1 且数值不匹配销量）
 - 配件采购行 Excel 口径自相矛盾（详见 quirks），整行列为已知瑕疵，引擎按固定 N+2×0.5×60 计算
-- 2026-08 线下 312.554（=标准-07 回款）与 2026-09 回款 578.414 为 Excel 已知瑕疵
+- 2026-08 线下/合计 312.554 / 502.454 与引擎一致（07 已发生月不进入引擎轴）
 """
 import sys
 from pathlib import Path
@@ -74,11 +74,10 @@ def main():
           gv("collect.total", "2026-10") - gv("sale.subscription.amount", "2026-10"), 800.982)
     check("purchase.main 10（N+2）", gv("purchase.main", "2026-10"), 460)
 
-    # --- 渠道佣金：Excel 有值直通；07 空走兜底 = 0 ---
+    # --- 渠道佣金：Excel 逐月有值 → 全部导入直通 ---
     print("== 渠道佣金 ==")
     for p, expect in (("2026-08", 8.0), ("2026-09", 15.6277), ("2026-10", 31.5036), ("2026-12", 47.2554)):
         check(f"comm {p}（导入直通）", gv("exp.channel_commission", p), expect)
-    check("comm 2026-07（引擎兜底=上月无线下）", gv("exp.channel_commission", "2026-07"), 0)
     # 2028/2029 列是全年引用 → 引擎按季节曲线月度化（销售/订阅/费用同口径）
     check("comm 2028 合计（月度化）", sum(gv("exp.channel_commission", p) for p in periods if p.startswith("2028")), 1575.18)
     check("comm 2029 合计（月度化）", sum(gv("exp.channel_commission", p) for p in periods if p.startswith("2029")), 3150.36)
@@ -102,40 +101,48 @@ def main():
     # --- 逐月对账（口径对齐后；排除已知瑕疵期） ---
     print("== 逐月对账（口径对齐） ==")
     quirks = {
-        "sale.offline.amount（线下含配件）": {"2026-08"},   # 减 07 回款
-        "sale.total.amount（线上+线下）": {"2026-07", "2026-08"},
+        "sale.online.amount": {"2028-12", "2029-12"},            # 全年引用列（Excel 全年值 18990/66465）
+        "sale.offline.amount": {"2026-08",                      # Excel 08 不含 07 回款 160
+                                "2028-12", "2029-12"},          # 全年引用列（Excel 全年值 31503.6/63007.2）
+        "sale.total.amount": {"2026-08",                          # 同上；2027-08 起 Excel 合计含订阅（用户确认口径）
+                              "2027-08", "2027-09", "2027-10",
+                              "2027-11", "2027-12", "2028-12", "2029-12"},
         "purchase.main": {"2028-12", "2029-12"},            # 全年引用列 vs 引擎月度
         "purchase.accessory": {"2026-09", "2026-10", "2026-11", "2026-12", "2027-01", "2027-02",
                                "2027-03", "2027-04", "2027-05", "2027-06",
                                "2027-07", "2027-08", "2027-09", "2027-10",
                                "2027-11", "2027-12", "2028-12", "2029-12"},
         # 配件采购整行：Excel 口径自相矛盾（09 起 N+1、2027 起比例漂移、全年列 900/2250 与销量不符），引擎固定 N+2×0.5×60
-        "exp.channel_commission": {"2026-07", "2028-12", "2029-12"},
+        "exp.channel_commission": {"2028-12", "2029-12"},
     }
+    # (显示名, Excel 键, 引擎行键列表)；线上/线下行=硬件+该渠道配件；合计行=线上+线下+配件（Excel 不含订阅）
     pairs = [
-        ("sale.online.amount（线上含配件）", ["sale.online.amount", "sale.accessory.amount"]),
-        ("sale.offline.amount（线下含配件）", ["sale.offline.amount", "sale.accessory.amount"]),
-        ("sale.total.amount（线上+线下）", ["sale.online.amount", "sale.offline.amount"]),
-        ("purchase.main", ["purchase.main"]),
-        ("purchase.accessory", ["purchase.accessory"]),
-        ("exp.channel_commission", ["exp.channel_commission"]),
+        ("线上销售（含配件）", "sale.online.amount",
+         ["sale.online.amount", "sale.accessory.amount"], "online"),
+        ("线下销售（含配件）", "sale.offline.amount",
+         ["sale.offline.amount", "sale.accessory.amount"], "offline"),
+        ("销售额合计", "sale.total.amount",
+         ["sale.online.amount", "sale.offline.amount", "sale.accessory.amount"], "total"),
+        ("整机采购", "purchase.main", ["purchase.main"], None),
+        ("配件采购", "purchase.accessory", ["purchase.accessory"], None),
+        ("渠道佣金", "exp.channel_commission", ["exp.channel_commission"], None),
     ]
-    for name, keys in pairs:
+    for name, xkey, gkeys, mode in pairs:
         diff = []
         for p in periods:
-            if p in quirks.get(name, set()):
+            if p in quirks.get(xkey, set()):
                 continue
-            e = ev(name, p)
+            e = ev(xkey, p)
             if e is None:
                 continue
-            if len(keys) == 1:
-                a = gv(keys[0], p)
-            elif name == "sale.online.amount（线上含配件）":
-                a = gv("sale.online.amount", p) + acc_online_share(p)
-            elif name == "sale.offline.amount（线下含配件）":
-                a = gv("sale.offline.amount", p) + gv("sale.accessory.amount", p) - acc_online_share(p)
+            if mode == "online":
+                a = gv(gkeys[0], p) + acc_online_share(p)
+            elif mode == "offline":
+                a = gv(gkeys[0], p) + gv(gkeys[1], p) - acc_online_share(p)
+            elif mode == "total":
+                a = sum(gv(k, p) for k in gkeys)
             else:
-                a = gv(keys[0], p) + gv(keys[1], p)
+                a = gv(gkeys[0], p)
             if abs(a - e) > 0.05:
                 diff.append(f"{p}(引擎 {a:.2f} vs {e:.2f})")
         status = "OK " if not diff else "DIFF"

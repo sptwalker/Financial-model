@@ -8,9 +8,10 @@ import { FORECAST_METHODS, SCENARIO_COLORS } from '../rows'
 
 // 预测工作台（阶段 3）：
 // 历史销量（sales_actuals）→ 方法阶梯 + 回测选优 → 置信区间 → 接受回填 qty 并重算现金流。
-// 历史只有 1-2 个月时走计划锚定（形状=计划曲线，水平=实际/计划校准），并明示"数据不足"。
+// 2026-07 为已发生月（报表实际≈0 台），引擎轴 2026-08 起；历史只有 1-2 个月时
+// 走计划锚定（形状=计划曲线，水平=实际/计划校准），并明示"数据不足"。
 
-const DEFAULT_HORIZON = ['2026-07', '2027-12']
+const DEFAULT_HORIZON = ['2026-08', '2027-12']
 
 function nextMonth(p) {
   const [y, m] = p.split('-').map(Number)
@@ -255,8 +256,7 @@ export default function Forecast({ user }) {
             ))}
           </select>
           <select value={horizon.join(',')} onChange={(e) => setHorizon(e.target.value.split(','))}>
-            <option value={DEFAULT_HORIZON.join(',')}>2026-07 ~ 2027-12</option>
-            <option value={['2026-08', '2027-12'].join(',')}>2026-08 ~ 2027-12</option>
+            <option value={DEFAULT_HORIZON.join(',')}>2026-08 ~ 2027-12（推荐）</option>
             <option value={['2027-01', '2028-12'].join(',')}>2027-01 ~ 2028-12</option>
           </select>
           <button className="btn primary" onClick={onRun} disabled={running || !scenarioId}>

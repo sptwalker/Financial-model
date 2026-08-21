@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
-    # 期数边界（与 Excel 口径一致）
-    PERIOD_START: str = "2026-07"
+    # 期数边界（预测/规划起点 2026-08；2026-07 为已发生月，按财务报表实际值锚定）
+    PERIOD_START: str = "2026-08"
     PERIOD_END: str = "2029-12"
 
     class Config:

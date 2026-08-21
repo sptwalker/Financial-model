@@ -68,7 +68,7 @@ def test_recalc_price_override_proportional(seeded):
     p = "sale.online.amount|2026-08"
     assert new[p] == base[p] * Decimal("1999") / Decimal("1799")
     assert new["qty.online|2026-08"] == base["qty.online|2026-08"]
-    assert new["exp.salary|2026-07"] == base["exp.salary|2026-07"]
+    assert new["exp.salary|2026-08"] == base["exp.salary|2026-08"]
     assert new["sale.offline.amount|2026-08"] == base["sale.offline.amount|2026-08"]
 
 

@@ -151,7 +151,7 @@ def _ser(res: dict) -> dict:
 def run_forecast(body: RunRequest, db: Session = Depends(get_db),
                  current_user=Depends(get_current_user)):
     """运行预测（无副作用）：序列 + CI + 各档回测（全部角色可运行）"""
-    horizon = tuple(body.horizon) if body.horizon else ("2026-07", "2027-12")
+    horizon = tuple(body.horizon) if body.horizon else ("2026-08", "2027-12")
     try:
         res = fs.run_forecast(db, body.scenario_id, method=body.method,
                               horizon=horizon, scale_targets=body.scale_targets)

@@ -125,7 +125,7 @@ def _d(x) -> Decimal:
 
 
 def periods_between(start: str, end: str) -> list[str]:
-    """'2026-07'..'2029-12' 逐月列表"""
+    """'start'..'end'（含端点）逐月列表，如 '2026-08'..'2029-12'"""
     y1, m1 = map(int, start.split("-"))
     y2, m2 = map(int, end.split("-"))
     out = []

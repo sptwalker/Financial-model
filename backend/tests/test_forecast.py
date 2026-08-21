@@ -121,7 +121,7 @@ def test_run_forecast_sparse_fallback(seeded):
     assert res["method"] == "plan_anchored"       # 仅 1 有效月 → 最低档
     assert res["data_sufficient"] is False         # 触发"数据不足"文案
     series = res["series"]
-    assert len(series) == 18                        # 2026-07..2027-12
+    assert len(series) == 17                        # 2026-08..2027-12
     # 非塌缩：远多于 2 个月有正 yhat（seasonal_weights bug 会把量塌进 2 月）
     assert sum(1 for pt in series if pt["yhat"] > 0) >= 12
     # CI 有序 + 未来月带宽 > 0

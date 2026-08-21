@@ -16,8 +16,8 @@ OUT = BACKEND_DIR / "data" / "reconcile_report.txt"
 
 
 def main():
-    imp, grid, params, salary_07 = load_fixture()
-    report, bugs = build_report(imp, grid, params, salary_07)
+    imp, grid, params, salary_08 = load_fixture()
+    report, bugs = build_report(imp, grid, params, salary_08)
     OUT.write_text(report, encoding="utf-8")
     print(report)
     print(f"\n报告已写入 {OUT}")

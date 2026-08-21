@@ -86,17 +86,17 @@ def test_dev_login_user_out_serializes_created_at(token, client):
 # ---- 3. grid 行×期组装（曾折叠成最后一个 period）----
 
 def test_grid_returns_full_period_range(token, client):
-    """grid 每行必须含全部 42 期（曾只剩 2029-12 一列）"""
+    """grid 每行必须含全部 41 期（曾只剩 2029-12 一列）"""
     r = client.get("/api/v1/scenarios/1/grid", headers=_auth(token))
     assert r.status_code == 200
     cells = r.json()["cells"]
     assert len(cells) == 37, f"行数异常: {len(cells)}"
     per_row = {k: len(v) for k, v in cells.items()}
-    bad = [k for k, n in per_row.items() if n != 42]
+    bad = [k for k, n in per_row.items() if n != 41]
     assert not bad, f"行期折叠残留: {bad}"
-    # 抽查：qty.online 2026-08 是输入，且含 42 个不同期
+    # 抽查：qty.online 2026-08 是输入，且含 41 个不同期
     assert cells["qty.online"]["2026-08"]["source"] == "input"
-    assert set(cells["sale.total.amount"]) >= {"2026-07", "2029-12"}
+    assert set(cells["sale.total.amount"]) >= {"2026-08", "2029-12"}
 
 
 # ---- 4. recalc 端到端 ----
@@ -111,7 +111,7 @@ def test_recalc_end_to_end(token, client):
                     headers=_auth(token), json={"params": {"price_online": "1999"}})
     assert r.status_code == 200, r.text
     v2 = r.json()
-    assert v2["version_no"] == 2 and v2["cell_count"] == 1554
+    assert v2["version_no"] == 2 and v2["cell_count"] == 1517
 
     r = client.get("/api/v1/scenarios/1/grid?version_no=2", headers=_auth(token))
     cells = r.json()["cells"]

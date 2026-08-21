@@ -273,22 +273,21 @@ def classify_cells(excel_key: str, cells: list[str], excel_sub: dict) -> dict:
             if _is_annual(p):
                 mark(p, "ANNUAL", "Excel 全年列=整机+配件；引擎按月 N+2 滚动")
 
-    # --- 费用行：工资 07 按工资表补；其余费用 2026-08 起逐月 MATCH ---
+    # --- 费用行：工资 08 按工资表补；其余费用 2026-09 起逐月 MATCH ---
     if y == "exp.salary":
-        mark("2026-07", "KNOWN_RULE_DIFF", "Excel 空；引擎按工资表应付合计 174.160574 万")
+        mark("2026-08", "KNOWN_RULE_DIFF", "Excel 计划 240；引擎按工资表应付合计 174.160574 万")
         for p in monthly:
-            if p >= "2026-08":
+            if p >= "2026-09":
                 mark(p, "MATCH")
-    if y == "exp.channel_commission":
-        mark("2026-07", "KNOWN_RULE_DIFF", "Excel 空；引擎兜底=上月线下销售×5%=0")
+    # 渠道佣金：Excel 08 起逐月有值 → 导入直通，引擎值==Excel 值（兜底不触发）
 
     # --- 现金行 ---
     if y == "cash.opening":
         for p in monthly:
-            if p > "2026-07":
+            if p >= "2026-08":
                 mark(p, "KNOWN_RULE_DIFF", "Excel 静态期初 vs 引擎滚动（上期末）")
     if y == "cash.expense":
-        mark("2026-07", "KNOWN_QUIRK", "Excel 规划支出 1068（07 费用明细全空）")
+        mark("2026-08", "KNOWN_RULE_DIFF", "Excel 514.0；引擎=报表锚定实际费用（07 费用明细全空、工资按工资表应付 174.160574 万）")
         for p in monthly:
             if p >= "2026-09":
                 mark(p, "KNOWN_RULE_DIFF", "Excel 支出=费用+整机采购（不含配件）；引擎含配件采购")
@@ -318,16 +317,16 @@ def _is_annual(p: str) -> bool:
 
 
 def load_fixture():
-    """加载 Excel 数据 + 工资表 07 补值 + 引擎计算 → (imp, grid, params, salary_07)"""
+    """加载 Excel 数据 + 工资表 08 补值 + 引擎计算 → (imp, grid, params, salary_08)"""
     imp = import_xls(XLS)
     params = Params()
-    salary_07 = payroll_total_payable(PAYROLL_XLSX)
-    imp["inputs"].setdefault("exp.salary", {})["2026-07"] = salary_07
+    salary_08 = payroll_total_payable(PAYROLL_XLSX)
+    imp["inputs"].setdefault("exp.salary", {})["2026-08"] = salary_08
     grid = run(imp["periods"], params, imp["inputs"])
-    return imp, grid, params, salary_07
+    return imp, grid, params, salary_08
 
 
-def build_report(imp: dict, grid: dict, params: Params, salary_07: Decimal) -> tuple[str, list[str]]:
+def build_report(imp: dict, grid: dict, params: Params, salary_08: Decimal) -> tuple[str, list[str]]:
     """生成对账报告文本 + BUG 明细（不写盘）"""
     inputs, excel, periods = imp["inputs"], imp["excel"], imp["periods"]
     lines = [

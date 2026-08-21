@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """预测服务（阶段 3 核心）：历史累积 → 方法阶梯 → 序列+CI → 回填引擎
 
-现实校准（关键）：2026-07 是发售起点，有效历史 ≈ 1 月。故：
+现实校准（关键）：2026-07 为发售起点（已发生月前置历史，报表实际≈0 台），
+引擎期间轴 2026-08 起，有效历史 ≈ 1 月。故：
 - 历史唯一来源 = sales_actuals 表（绝不读模型网格，网格是前瞻计划非历史）；
 - 方法阶梯当前只有 plan_anchored 可达（seasonal_naive≥12月、holt_winters≥24、sarima≥36）；
 - 形状取自"计划曲线"（完整前瞻形状），历史推形状一律过 robust_shape 兜底，
@@ -310,7 +311,7 @@ def _execute(method: str, total_actual: dict, plan_total: dict,
 
 
 def run_forecast(db: Session, scenario_id: int, method: str | None = None,
-                 horizon: tuple[str, str] = ("2026-07", "2027-12"),
+                 horizon: tuple[str, str] = ("2026-08", "2027-12"),
                  scale_targets: dict | None = None) -> dict:
     """编排（无副作用）：历史 → 选档 → 计划曲线 → 序列 → 拆渠道 → (可选)缩放 → 各档回测"""
     hp = periods_between(horizon[0], horizon[1])
