@@ -97,6 +97,7 @@ body {
 .stat-orange { border-left-color: var(--orange); }
 .stat-red { border-left-color: var(--red); }
 .stat-gray { border-left-color: var(--gray); }
+.stat-purple { border-left-color: #9254de; }
 .stat-label { font-size: 12px; color: var(--muted); }
 .stat-value { font-size: 21px; font-weight: 700; margin-top: 4px; letter-spacing: -0.2px; }
 .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
@@ -189,14 +190,16 @@ body {
   color: var(--muted); font-size: 11px; padding: 6px 2px 0;
 }
 
-/* ---------- 底部 tab ---------- */
+/* ---------- 底部 tab（窄条居中，适配手机） ---------- */
 .tab-bar {
   position: fixed; left: 0; right: 0; bottom: 0;
-  height: 56px;
+  max-width: 760px; margin: 0 auto;
+  height: 52px;
   display: flex;
   background: var(--card);
   border-top: 1px solid var(--line);
-  box-shadow: 0 -2px 10px rgba(31, 39, 51, 0.04);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -2px 12px rgba(31, 39, 51, 0.06);
   z-index: 20;
 }
 .tab-bar a {
@@ -285,13 +288,51 @@ body {
   display: inline-block; width: 6px; height: 6px; margin-left: 5px;
   border-radius: 50%; background: var(--green); vertical-align: middle;
 }
-.budget-row { margin: 10px 0; }
+
+/* 方案切换（乐观/中性/悲观） */
+.budget-scenarios { display: flex; gap: 6px; }
+.budget-scenarios button {
+  border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  padding: 6px 10px; border-radius: 9px; font-size: 12px; cursor: pointer;
+}
+.budget-scenarios button.on { background: var(--blue); color: #fff; border-color: var(--blue); font-weight: 600; }
+
+/* 售价/成本：一行 4 列（手机 2 列），输入框收窄 */
+.budget-params { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+.budget-params .param-item input { padding: 8px 9px; font-size: 14px; }
+.budget-params .param-label { font-size: 12px; }
+
+/* 分区头 + 年/季/月切换 */
+.budget-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.budget-sec-head h2 { margin: 0; }
+.gran-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+.gran-toggle button { border: none; background: var(--card); padding: 5px 11px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.gran-toggle button.on { background: var(--blue); color: #fff; }
+
+/* 分区底色 */
+.budget-sec { border-left: 4px solid var(--gray); }
+.budget-sec--sales { background: #f2f7ff; border-left-color: #4f8cff; }
+.budget-sec--rd { background: #f8f4ff; border-left-color: #9254de; }
+.budget-sec--mkt { background: #fff7ec; border-left-color: #f6a609; }
+.budget-sec--admin { background: #f1faf4; border-left-color: #00b578; }
+.budget-sec--fin { background: #ecfaf6; border-left-color: #13c2a3; }
+
+.budget-row { margin: 8px 0; }
 .budget-row-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
 .budget-strip {
   display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;
   -webkit-overflow-scrolling: touch;
 }
-.budget-strip .edit-cell { flex: none; width: 76px; }
+.budget-strip .edit-cell { flex: none; width: 74px; }
+.budget-strip .edit-cell input { background: #fff; }
+/* 列数少（年/季）时放宽输入框，横向排满整行 */
+.budget-strip--wide .edit-cell { width: auto; flex: 1; min-width: 92px; }
+.budget-strip--wide .edit-cell input { min-width: 0; width: 100%; }
+.budget-chart { margin-top: 4px; background: rgba(255, 255, 255, 0.6); border-radius: 10px; padding: 4px 2px; }
+
+@media (min-width: 640px) {
+  .budget-params { grid-template-columns: repeat(4, 1fr); }
+}
 
 /* ========== 预测页（fc-* 独立命名空间；移动优先，@640px 放出电脑端区块） ========== */
 .pc-only { display: none; }              /* 手机默认隐藏：导入导出/回测明细/三情景/缩放目标 */

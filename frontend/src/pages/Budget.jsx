@@ -1,10 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc } from '../api'
 import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS } from '../rows'
 
-const r6 = (n) => Math.round(n * 1e6) / 1e6
+const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
+const QTY_KEYS = new Set(BUDGET_SALES_QTY.map((r) => r.key))
+const CHART_PALETTE = ['#4f8cff', '#5ad8a6', '#f6bd16', '#9254de', '#ff9f7f', '#5b8ff9', '#e86452']
 
-// 期间分组：月=逐月；季=按年+季度；年=按年。用于年/季粒度的批量填充（展开为月度值）
+// 方案 = 中性基准 × 销量系数（乐观 +20% / 悲观 -20%），成本/融资不随方案变
+const SCENARIOS = [
+  { name: '中性', factor: 1 },
+  { name: '乐观', factor: 1.2 },
+  { name: '悲观', factor: 0.8 },
+]
+
+// 期间分组：月=逐月；季=按年+季度；年=按年。年/季粒度批量填充时均摊为月度值
 function periodGroups(periods, gran) {
   if (gran === 'month') return periods.map((p) => ({ label: p.slice(2), months: [p] }))
   const byKey = {}
@@ -18,16 +28,21 @@ function periodGroups(periods, gran) {
   return order.map((k) => ({ label: k.length === 4 ? `${k.slice(2)}年` : k.slice(2), months: byKey[k] }))
 }
 
+// 各分区成本行分组
+const RD = BUDGET_COST_GROUPS[0].rows
+const MKT = BUDGET_COST_GROUPS[1].rows
+const ADMIN = BUDGET_COST_GROUPS[2].rows
+
 export default function Budget() {
-  const [scenarios, setScenarios] = useState([])
-  const [scenarioId, setScenarioId] = useState(null)
+  const [scenarios, setScenarios] = useState([])      // DB 情景（含 id，用于保存）
+  const [factor, setFactor] = useState(1)             // 当前方案销量系数
+  const [neutralId, setNeutralId] = useState(null)    // 中性情景 id（编辑/预览基准）
   const [versionNo, setVersionNo] = useState(null)
   const [baseGrid, setBaseGrid] = useState(null)
-  const [salesParams, setSalesParams] = useState({}) // {price_online,...} 当前值（可编辑）
-  const [baseParams, setBaseParams] = useState({})   // 加载时的基线，用于判断是否改动
-  const [edits, setEdits] = useState({})              // {row: {period: str}} 输入覆盖（已展开为月度）
-  const [preview, setPreview] = useState(null)        // previewRecalc 回显的网格
-  const [gran, setGran] = useState('month')
+  const [salesParams, setSalesParams] = useState({})
+  const [baseParams, setBaseParams] = useState({})
+  const [edits, setEdits] = useState({})              // {row: {period: str}} 中性基准输入覆盖（月度）
+  const [preview, setPreview] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const fetchSeq = useRef(0)
@@ -56,8 +71,8 @@ export default function Budget() {
       try {
         const scs = await listScenarios()
         setScenarios(scs)
-        const active = scs.find((s) => s.name === '中性') || scs.find((s) => s.is_active) || scs[0]
-        if (active) { setScenarioId(active.id); load(active.id) }
+        const neutral = scs.find((s) => s.name === '中性') || scs[0]
+        if (neutral) { setNeutralId(neutral.id); load(neutral.id) }
       } catch (e) {
         setMsg(String(e.response?.data?.detail || e.message))
       }
@@ -66,19 +81,25 @@ export default function Budget() {
   }, [])
 
   const periods = useMemo(() => gridPeriods(baseGrid), [baseGrid])
-  const groups = useMemo(() => periodGroups(periods, gran), [periods, gran])
 
-  const inputsPayload = () => {
-    const out = {}
-    for (const row of Object.keys(edits)) {
-      out[row] = {}
-      for (const p of Object.keys(edits[row])) {
-        const v = edits[row][p]
-        out[row][p] = v === '' || v == null ? '0' : String(v)
-      }
-    }
-    return out
+  // 输入框显示值：优先 edits，否则中性基线
+  const effIn = (row, p) => {
+    const e = edits[row]?.[p]
+    if (e !== undefined) return e
+    return baseGrid?.cells?.[row]?.[p]?.value ?? '0'
   }
+  const groupVal = (row, months) =>
+    months.length === 1 ? effIn(row, months[0])
+      : r2(months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0))
+  const setGroup = (row, months, v) => {
+    const each = months.length === 1 ? String(r2(Number(v || 0))) : String(r2(Number(v || 0) / months.length))
+    setEdits((prev) => {
+      const next = { ...prev, [row]: { ...(prev[row] || {}) } }
+      for (const p of months) next[row][p] = each
+      return next
+    })
+  }
+
   const paramsPayload = () => {
     const changed = {}
     for (const f of BUDGET_SALES_PARAMS) {
@@ -87,16 +108,36 @@ export default function Budget() {
     }
     return Object.keys(changed).length ? changed : undefined
   }
-  const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
+  // 构造某方案的输入覆盖：中性用编辑增量；乐观/悲观再把销量整体乘系数
+  const inputsPayload = (fac) => {
+    const out = {}
+    for (const row of Object.keys(edits)) {
+      out[row] = {}
+      for (const p of Object.keys(edits[row])) {
+        const v = edits[row][p]
+        out[row][p] = v === '' || v == null ? '0' : String(v)
+      }
+    }
+    if (fac !== 1) {
+      for (const q of QTY_KEYS) {
+        out[q] = {}
+        for (const p of periods) out[q][p] = String(r2(Number(effIn(q, p) || 0) * fac))
+      }
+    }
+    return out
+  }
 
-  // 边改边预览：编辑后防抖 400ms 调预览端点（不建版本）
+  const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
+  const needPreview = dirty || factor !== 1
+
+  // 边改边预览 / 切换方案：防抖 400ms 调预览端点（不建版本）
   useEffect(() => {
-    if (!scenarioId || !baseGrid) return
-    if (!dirty) { setPreview(null); return }
+    if (!neutralId || !baseGrid) return
+    if (!needPreview) { setPreview(null); return }
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       try {
-        const p = await previewRecalc(scenarioId, { params: paramsPayload(), inputs: inputsPayload() })
+        const p = await previewRecalc(neutralId, { params: paramsPayload(), inputs: inputsPayload(factor) })
         setPreview(p)
       } catch (e) {
         setMsg('预览失败：' + String(e.response?.data?.detail || e.message))
@@ -104,37 +145,19 @@ export default function Budget() {
     }, 400)
     return () => clearTimeout(timer.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edits, salesParams, scenarioId, baseGrid])
-
-  // 输入框显示值：优先 edits，否则基线
-  const effIn = (row, p) => {
-    const e = edits[row]?.[p]
-    if (e !== undefined) return e
-    return baseGrid?.cells?.[row]?.[p]?.value ?? '0'
-  }
-  const groupVal = (row, months) =>
-    months.length === 1 ? effIn(row, months[0])
-      : r6(months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0))
-  const setGroup = (row, months, v) => {
-    const each = months.length === 1 ? v : String(r6(Number(v || 0) / months.length))
-    setEdits((prev) => {
-      const next = { ...prev, [row]: { ...(prev[row] || {}) } }
-      for (const p of months) next[row][p] = each
-      return next
-    })
-  }
+  }, [edits, salesParams, factor, neutralId, baseGrid])
 
   const metrics = useMemo(() => {
     const cells = preview?.cells || baseGrid?.cells
     if (!cells || !periods.length) return null
     const sum = (k) => periods.reduce((a, p) => a + Number(cells[k]?.[p]?.value ?? 0), 0)
-    const closings = periods.map((p) => Number(cells['cash.closing']?.[p]?.value ?? 0))
+    const sumRows = (rows) => rows.reduce((a, r) => a + sum(r.key), 0)
     return {
-      cashClose: closings[closings.length - 1],
-      cashMin: Math.min(...closings),
+      qty: sum('qty.total'),
       sale: sum('sale.total.amount'),
-      collect: sum('collect.total'),
-      expense: sum('exp.total'),
+      rd: sumRows(RD),
+      mkt: sumRows(MKT),
+      admin: sumRows(ADMIN),
       financing: sum('cash.financing'),
     }
   }, [preview, baseGrid, periods])
@@ -143,12 +166,19 @@ export default function Budget() {
     try {
       setBusy(true)
       setMsg('保存中…')
-      const name = scenarios.find((s) => s.id === scenarioId)?.name || ''
-      const r = await recalc(scenarioId, {
-        params: paramsPayload(), inputs: inputsPayload(), comment: `预算调整 · ${name}`,
-      })
-      setMsg(`已保存新版本 v${r.version_no}（${r.cell_count} 单元格）`)
-      await load(scenarioId)
+      const params = paramsPayload()
+      const byName = (n) => scenarios.find((s) => s.name === n)
+      let last = null
+      for (const s of SCENARIOS) {
+        const sc = byName(s.name)
+        if (!sc) continue
+        const r = await recalc(sc.id, {
+          params, inputs: inputsPayload(s.factor), comment: `预算调整 · ${s.name}`,
+        })
+        if (s.factor === 1) last = r
+      }
+      setMsg(`已保存：中性 v${last?.version_no}（乐观/悲观按 ±20% 同步）`)
+      await load(neutralId)
     } catch (e) {
       setMsg('保存失败：' + String(e.response?.data?.detail || e.message))
     } finally {
@@ -159,21 +189,18 @@ export default function Budget() {
   return (
     <div className="page">
       <header className="app-header">
-        <h1>预算设置</h1>
-        <div className="scenario-bar">
-          <select value={scenarioId ?? ''}
-            onChange={(e) => { const id = Number(e.target.value); setScenarioId(id); load(id) }}>
-            {scenarios.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+        <div>
+          <h1>预算设置</h1>
+          <div className="budget-scenarios">
+            {SCENARIOS.map((s) => (
+              <button key={s.name} className={factor === s.factor ? 'on' : ''}
+                onClick={() => setFactor(s.factor)}>
+                {s.name}{s.factor !== 1 ? `（销量${s.factor > 1 ? '+' : '-'}20%）` : ''}
+              </button>
             ))}
-          </select>
-          <span className="version-chip">当前 v{versionNo ?? '-'}</span>
-          <select value={gran} onChange={(e) => setGran(e.target.value)}>
-            <option value="month">按月</option>
-            <option value="quarter">按季</option>
-            <option value="year">按年</option>
-          </select>
+          </div>
         </div>
+        <span className="version-chip">中性 v{versionNo ?? '-'}</span>
       </header>
 
       {msg && <div className="recalc-msg">{msg}</div>}
@@ -184,53 +211,43 @@ export default function Budget() {
         <>
           {metrics && (
             <section className="stats-grid budget-metrics">
-              <Metric label="期末现金" value={fmt(metrics.cashClose, 0)} tone="gray" live={!!preview} />
-              <Metric label="最低期末现金" value={fmt(metrics.cashMin, 0)}
-                tone={metrics.cashMin < 0 ? 'red' : 'green'} live={!!preview} />
-              <Metric label="累计销售" value={fmt(metrics.sale, 0)} tone="blue" live={!!preview} />
-              <Metric label="累计回款" value={fmt(metrics.collect, 0)} tone="green" live={!!preview} />
-              <Metric label="累计费用" value={fmt(metrics.expense, 0)} tone="orange" live={!!preview} />
-              <Metric label="累计融资" value={fmt(metrics.financing, 0)} tone="gray" live={!!preview} />
+              <Metric label="预期总销售量" unit="万台" value={fmt(metrics.qty, 1)} tone="blue" live={!!preview} />
+              <Metric label="预期总销售额" unit="万元" value={fmt(metrics.sale, 0)} tone="blue" live={!!preview} />
+              <Metric label="研发总预算" unit="万元" value={fmt(metrics.rd, 0)} tone="purple" live={!!preview} />
+              <Metric label="营销总预算" unit="万元" value={fmt(metrics.mkt, 0)} tone="orange" live={!!preview} />
+              <Metric label="管理总预算" unit="万元" value={fmt(metrics.admin, 0)} tone="green" live={!!preview} />
+              <Metric label="总融资额" unit="万元" value={fmt(metrics.financing, 0)} tone="gray" live={!!preview} />
             </section>
           )}
 
-          <section className="card">
-            <h2>销售设置</h2>
-            <div className="param-list">
-              {BUDGET_SALES_PARAMS.map((f) => (
-                <label className="param-item" key={f.key}>
-                  <span className="param-label">{f.label}</span>
-                  <input type="number" step={f.step} value={salesParams[f.key] ?? ''}
-                    onChange={(e) => setSalesParams((p) => ({ ...p, [f.key]: e.target.value }))} />
-                </label>
-              ))}
-            </div>
-            {BUDGET_SALES_QTY.map((row) => (
-              <BudgetRow key={row.key} label={`${row.label}（${row.unit}）`} rowKey={row.key}
-                groups={groups} groupVal={groupVal} setGroup={setGroup} />
-            ))}
-            <p className="hint">2028/2029 销量由年度目标驱动，逐月编辑对这两年可能被目标覆盖，请在中性方案确认年度目标。</p>
-          </section>
+          <Section title="销售设置（万台 / 万元）" tone="sales" rows={BUDGET_SALES_QTY}
+            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup}
+            edits={edits} factor={factor}
+            top={(
+              <div className="budget-params">
+                {BUDGET_SALES_PARAMS.map((f) => (
+                  <label className="param-item" key={f.key}>
+                    <span className="param-label">{f.label}</span>
+                    <input type="number" step={f.step} value={salesParams[f.key] ?? ''}
+                      onChange={(e) => setSalesParams((p) => ({ ...p, [f.key]: e.target.value }))} />
+                  </label>
+                ))}
+              </div>
+            )}
+            note="2028/2029 销量由年度目标驱动，逐月编辑对这两年可能被目标覆盖；乐观/悲观按销量整体 ±20%。" />
 
-          {BUDGET_COST_GROUPS.map((g) => (
-            <section className="card" key={g.name}>
-              <h2>成本预算 · {g.name}</h2>
-              {g.rows.map((row) => (
-                <BudgetRow key={row.key} label={row.label} rowKey={row.key}
-                  groups={groups} groupVal={groupVal} setGroup={setGroup} />
-              ))}
-            </section>
-          ))}
-
-          <section className="card">
-            <h2>投融资设置</h2>
-            <p className="hint">到账融资款按月一次性注入现金，不做年度摊分。</p>
-            <BudgetRow label="到账融资款" rowKey="cash.financing"
-              groups={groups} groupVal={groupVal} setGroup={setGroup} />
-          </section>
+          <Section title="研发预算（万元）" tone="rd" rows={RD}
+            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
+          <Section title="营销预算（万元）" tone="mkt" rows={MKT}
+            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
+          <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
+            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
+          <Section title="投融资（万元）" tone="fin" rows={[{ key: 'cash.financing', label: '到账融资款' }]}
+            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits}
+            note="到账融资款按月一次性注入现金，不做年度摊分。" />
 
           <div className="action-row">
-            <span className="hint">{dirty ? '已改动，指标为实时预览；点保存才落版本' : '未改动'}</span>
+            <span className="hint">{dirty ? '已改动，指标为实时预览；点保存才落版本' : factor !== 1 ? '当前为方案预览' : '未改动'}</span>
             <button className="btn primary" onClick={save} disabled={busy || !dirty}>
               {busy ? '保存中…' : '保存为新版本'}
             </button>
@@ -241,29 +258,71 @@ export default function Budget() {
   )
 }
 
-function Metric({ label, value, tone, live }) {
+function Metric({ label, value, unit, tone, live }) {
   return (
     <div className={`stat stat-${tone}`}>
       <div className="stat-label">{label}{live && <span className="live-dot" />}</div>
       <div className="stat-value">{value}</div>
-      <div className="stat-sub">万元</div>
+      <div className="stat-sub">{unit}</div>
     </div>
   )
 }
 
-function BudgetRow({ label, rowKey, groups, groupVal, setGroup }) {
+// 一个预算分区：自带年/季/月粒度切换、逐行编辑、实时柱状图
+function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits, factor = 1, top, note }) {
+  const [gran, setGran] = useState('year')
+  const groups = useMemo(() => periodGroups(periods, gran), [periods, gran])
+  const isQtySec = rows.some((r) => QTY_KEYS.has(r.key))
+
+  const option = useMemo(() => {
+    const scaled = (key, months) => {
+      const f = QTY_KEYS.has(key) ? factor : 1
+      return r2(f * months.reduce((a, p) => a + Number(effIn(key, p) || 0), 0))
+    }
+    const multi = rows.length > 1
+    return {
+      tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 2) },
+      legend: multi ? { bottom: 0, icon: 'roundRect', itemWidth: 9, itemHeight: 9, textStyle: { fontSize: 10 } } : undefined,
+      grid: { left: 40, right: 8, top: 10, bottom: multi ? 30 : 8, containLabel: true },
+      xAxis: { type: 'category', data: groups.map((g) => g.label), axisLabel: { fontSize: 9 } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eef1f6' } } },
+      series: rows.map((r, i) => ({
+        name: r.label, type: 'bar', stack: 's',
+        itemStyle: { color: CHART_PALETTE[i % CHART_PALETTE.length] },
+        data: groups.map((g) => scaled(r.key, g.months)),
+      })),
+    }
+    // 图形随编辑(edits)/粒度/方案实时刷新
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, groups, edits, factor])
+
   return (
-    <div className="budget-row">
-      <div className="budget-row-label">{label}</div>
-      <div className="budget-strip">
-        {groups.map((grp) => (
-          <label className="edit-cell" key={grp.label}>
-            <span>{grp.label}</span>
-            <input type="number" step="any" value={groupVal(rowKey, grp.months)}
-              onChange={(e) => setGroup(rowKey, grp.months, e.target.value)} />
-          </label>
-        ))}
+    <section className={`card budget-sec budget-sec--${tone}`}>
+      <div className="budget-sec-head">
+        <h2>{title}</h2>
+        <div className="gran-toggle">
+          {[['month', '月'], ['quarter', '季'], ['year', '年']].map(([k, l]) => (
+            <button key={k} className={gran === k ? 'on' : ''} onClick={() => setGran(k)}>{l}</button>
+          ))}
+        </div>
       </div>
-    </div>
+      {top}
+      {rows.map((r) => (
+        <div className="budget-row" key={r.key}>
+          <div className="budget-row-label">{r.label}{r.unit ? `（${r.unit}）` : ''}</div>
+          <div className={`budget-strip${groups.length <= 6 ? ' budget-strip--wide' : ''}`}>
+            {groups.map((g) => (
+              <label className="edit-cell" key={g.label}>
+                <span>{g.label}</span>
+                <input type="number" step="0.01" value={groupVal(r.key, g.months)}
+                  onChange={(e) => setGroup(r.key, g.months, e.target.value)} />
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="budget-chart"><Chart option={option} height={isQtySec ? 150 : 160} /></div>
+      {note && <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>{note}</p>}
+    </section>
   )
 }

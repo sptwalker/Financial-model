@@ -97,7 +97,6 @@ export const BUDGET_COST_GROUPS = [
     name: '运营管理',
     rows: [
       { key: 'exp.salary', label: '人力（工资）' },
-      { key: 'exp.headcount', label: '人数' },
       { key: 'exp.rent', label: '房租' },
       { key: 'exp.office_hw', label: '办公硬件' },
       { key: 'exp.it_service', label: '信息技术服务' },
