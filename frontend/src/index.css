@@ -299,7 +299,8 @@ body {
 
 /* 售价/成本：一行 4 列（手机 2 列），输入框收窄 */
 .budget-params { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
-.budget-params .param-item input { padding: 8px 9px; font-size: 14px; }
+.budget-params .param-item { min-width: 0; }
+.budget-params .param-item input { padding: 8px 9px; font-size: 14px; width: 100%; min-width: 0; }
 .budget-params .param-label { font-size: 12px; }
 
 /* 分区头 + 年/季/月切换 */
