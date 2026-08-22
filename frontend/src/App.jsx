@@ -37,7 +37,7 @@ function Shell({ user, onLogout }) {
       <div className="shell-body">
         <Routes>
           <Route path="/" element={<Dashboard user={user} onLogout={onLogout} />} />
-          <Route path="/forecast" element={<Forecast />} />
+          <Route path="/forecast" element={<Forecast user={user} />} />
           <Route path="/params" element={<Params />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

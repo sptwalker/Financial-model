@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
 import ThreeScenarioCard from '../components/ThreeScenarioCard'
-import { fmt, getGrid, getVersions, listScenarios, putCells, recalc,
+import { fmt, getGrid, getVersions, gridPeriods, listScenarios, putCells, recalc,
   releaseVersion, unreleaseVersion } from '../api'
 import { ROW_GROUPS, rowInfo, CASH_COLORS } from '../rows'
 
@@ -69,7 +69,7 @@ export default function Dashboard({ user, onLogout }) {
   }, [scenarioId, versionNo])
 
   const periods = useMemo(
-    () => (grid ? Object.keys(grid.cells).sort() : []),
+    () => gridPeriods(grid),
     [grid]
   )
 

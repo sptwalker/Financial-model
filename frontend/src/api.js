@@ -44,6 +44,14 @@ export async function getGrid(scenarioId, versionNo) {
   return data
 }
 
+// 网格是行主序 {row_key: {period: {...}}}，月份是内层 key 的并集（部分行稀疏，如年度目标只有 12 月）
+export function gridPeriods(grid) {
+  if (!grid?.cells) return []
+  const set = new Set()
+  for (const row of Object.values(grid.cells)) for (const p in row) set.add(p)
+  return [...set].sort()
+}
+
 export async function getVersions(scenarioId) {
   const { data } = await api.get(`/scenarios/${scenarioId}/versions`)
   return data

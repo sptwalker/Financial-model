@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Chart from '../components/Chart'
-import { fmt, getGrid, listForecastRuns } from '../api'
+import { fmt, getGrid, gridPeriods, listForecastRuns } from '../api'
 import { SCENARIO_COLORS } from '../rows'
 
 // 三情景并排（阶段 3）：读最新 ForecastRun 的版本链，对比悲观/中性/乐观的期末现金。
@@ -56,7 +56,7 @@ export default function ThreeScenarioCard({ scenarioId }) {
 
   const option = useMemo(() => {
     if (!grids || !grids.length) return null
-    const periods = Object.keys(grids[0].g.cells).sort()
+    const periods = gridPeriods(grids[0].g)
     return {
       tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 2) },
       legend: { bottom: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },
