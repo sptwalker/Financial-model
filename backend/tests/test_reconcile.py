@@ -10,16 +10,16 @@ from app.engine.reconcile import (
     TOL, reconcile_rows, engine_value, annual_engine_sum,
 )
 
-# 2027-08..2027-12 当月订阅（Excel 行值）；2028/2029 全年列 = 年度订阅目标
+# 2027-08..2027-12 当月订阅（Excel 行值）；2028 全年列 = 年度订阅目标
 EXPECTED_SUB_MONTHLY = {
     "2027-08": Decimal("56"), "2027-09": Decimal("67.2"), "2027-10": Decimal("70"),
     "2027-11": Decimal("112"), "2027-12": Decimal("112"),
 }
-EXPECTED_SUB_ANNUAL = {2028: Decimal("2461.2"), 2029: Decimal("6661.2")}
+EXPECTED_SUB_ANNUAL = {2028: Decimal("2461.2")}
 
 
 def test_no_unexplained_differences(fixture):
-    """全 37 行 × 41 期：不允许存在未解释差异（BUG=0）"""
+    """全 37 行 × 29 期：不允许存在未解释差异（BUG=0）"""
     imp, grid, params, salary_08 = fixture
     categories, bugs = reconcile_rows(imp, grid, params, [])
     assert bugs == [], f"存在未解释差异：{bugs}"
@@ -32,7 +32,7 @@ def test_match_count_baseline(fixture):
     imp, grid, params, salary_08 = fixture
     categories, bugs = reconcile_rows(imp, grid, params, [])
     assert (categories["MATCH"], categories["KNOWN_QUIRK"],
-            categories["KNOWN_RULE_DIFF"], categories["BUG"]) == (341, 75, 62, 0)
+            categories["KNOWN_RULE_DIFF"], categories["BUG"]) == (324, 73, 56, 0)
 
 
 def test_subscription_monthly_matches_excel(fixture):
@@ -45,7 +45,7 @@ def test_subscription_monthly_matches_excel(fixture):
 
 
 def test_subscription_annual_targets(fixture):
-    """2028/2029 订阅 = 年度目标 2461.2 / 6661.2（全年引用列）"""
+    """2028 订阅 = 年度目标 2461.2（全年引用列）"""
     imp, grid, params, salary_08 = fixture
     excel_sub = imp["excel"]["sale.subscription.amount"]
     for year, want in EXPECTED_SUB_ANNUAL.items():
@@ -54,18 +54,18 @@ def test_subscription_annual_targets(fixture):
 
 
 def test_annual_reference_columns_exact(fixture):
-    """2028/2029 全年列：线上/线下销售、工资、佣金年度合计与 Excel 精确一致"""
+    """2028 全年列：线上/线下销售、工资、佣金年度合计与 Excel 精确一致"""
     imp, grid, params, salary_08 = fixture
     for excel_key in ("sale.online.amount", "sale.offline.amount",
                       "exp.salary", "exp.channel_commission"):
-        for year in (2028, 2029):
+        for year in (2028,):
             x = imp["excel"][excel_key][f"{year}-12"]
             a = annual_engine_sum(grid, excel_key, year)
             assert abs(a - x) <= TOL, f"{excel_key} {year}: 引擎 {a} vs Excel {x}"
 
 
 def test_cash_opening_rolls_like_excel(fixture):
-    """期初现金：Excel 静态滚动链与引擎上期末滚动完全一致（41 期）"""
+    """期初现金：Excel 静态滚动链与引擎上期末滚动完全一致（29 期）"""
     imp, grid, params, salary_08 = fixture
     excel_open = imp["excel"]["cash.opening"]
     for p in sorted(excel_open):
@@ -83,11 +83,11 @@ def test_salary_august_from_payroll(fixture):
 
 
 def test_engine_cash_chain_consistent(fixture):
-    """引擎两条链各自自洽（月度期；2028/2029 全年引用列不含月度滚动）：
+    """引擎两条链各自自洽（月度期；2028 全年引用列不含月度滚动）：
     1) cash.opening 网格行=输入透传（Excel 静态期初链，用户确认口径）；
     2) cash.closing 网格行=引擎滚动：期初=输入、期末=期初+本期缺口、下期期初=上期期末。"""
     imp, grid, params, salary_08 = fixture
-    monthly = [p for p in imp["periods"] if p[:4] not in ("2028", "2029")]
+    monthly = [p for p in imp["periods"] if p[:4] not in ("2028",)]
     inputs_open = imp["inputs"]["cash.opening"]
     # 1) 期初网格行 = 输入链（首期 cash_open[0]=输入，其后透传输入）
     for p in monthly:

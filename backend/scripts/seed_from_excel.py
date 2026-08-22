@@ -9,7 +9,7 @@
     （引擎现金链唯一锚点=期间轴首期期初现金，见 calculator.run）
   · 利润表 2026-07 实际费用 → 07 月已发生费用行（exp.salary/game_dev/online_promo/office_other）
 
-期间轴 2026-08 起（41 期）：2026-07 为已发生月，按报表实际值锚定为前置历史
+期间轴 2026-08 起（29 期，至 2028-12）：2026-07 为已发生月，按报表实际值锚定为前置历史
 （qty=0 行写入 sales_actuals，预测从 2026-08 起）。
 
 用法：从 backend 目录运行 `python scripts/seed_from_excel.py`（幂等：重复运行重置为版本 1）

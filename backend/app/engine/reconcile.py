@@ -4,7 +4,7 @@
 分类口径：
 - MATCH            —— 口径对齐后一致（销售/回款/采购/费用/现金）
 - KNOWN_QUIRK      —— Excel 已知瑕疵（详见文档字符串与 QUIRKS 表）
-- KNOWN_RULE_DIFF  —— 用户确认的规则差异（订阅口径、工资 07 按工资表补、2028/2029 全年列月度化+账期）
+- KNOWN_RULE_DIFF  —— 用户确认的规则差异（订阅口径、工资 07 按工资表补、2028 全年列月度化+账期）
 - BUG              —— 既非对齐又无解释的差异（应为 0）
 
 已知瑕疵（Excel 侧，KNOWN_QUIRK）：
@@ -12,14 +12,14 @@
 - 2026-07 费用明细全空（合计 1060 / 支出 1068 为规划值，无行明细）
 - 2026-08 回款合计 160（=07 线下回款，非 08 当月）；2026-09 回款 578.414（权重与销量不符）
 - 配件采购 2026-09..2027-12 整行账期/比例漂移（与销量无法复现）
-- 现金缺口/期末现金（含 2028/2029 全年列）为 Excel 手填规划行（引擎按滚动计算）
+- 现金缺口/期末现金（含 2028 全年列）为 Excel 手填规划行（引擎按滚动计算）
 
 规则差异（引擎按确认口径，Excel 另口径，KNOWN_RULE_DIFF）：
 - 订阅收入：Excel=当月销量×0.7×200（计入销售额合计/回款合计）；
   引擎=累计装机×0.7×200（单独行，用户确认口径）→ 销售合计/回款合计差=当月订阅
 - 工资 2026-07：Excel 空；引擎按工资表应付合计 174.160574 万
 - 支出行：Excel=费用+整机采购（不含配件采购）；引擎=费用+采购合计（含配件）
-- 2028/2029 全年列：引擎按季节曲线月度化后，全年列行按年度合计对账
+- 2028 全年列：引擎按季节曲线月度化后，全年列行按年度合计对账
   （工资/佣金/期初现金年度合计一致 → MATCH；采购/支出等受账期影响 → RULE_DIFF）
 """
 import json
@@ -40,8 +40,8 @@ XLS = BACKEND_DIR.parent / "docs" / "现金流测算 2026.8.xls"
 PAYROLL_XLSX = BACKEND_DIR.parent / "docs" / "2026年7月创想悦动工资表.xlsx"
 TOL = Decimal("0.05")
 
-# 全年引用列（Excel 表头 2028/2029 = 全年）：比较改为「引擎全年合计 vs Excel 全年值」
-ANNUAL_COL_YEARS = {2028, 2029}
+# 全年引用列（Excel 表头 2028 = 全年）：比较改为「引擎全年合计 vs Excel 全年值」
+ANNUAL_COL_YEARS = {2028}
 # 销售/回款合计行：Excel 计入订阅收入（引擎单独行）→ 对齐公式加回 Excel 订阅行值
 SUB_SUM_ROWS = {"sale.total.amount", "collect.total"}
 # 支出行：Excel 不含配件采购（引擎含）→ 对齐公式减回引擎配件采购
@@ -212,7 +212,7 @@ def reconcile_rows(imp: dict, grid: dict, params: Params, lines: list) -> list[s
 
 def classify_cells(excel_key: str, cells: list[str], excel_sub: dict) -> dict:
     """{period: (分类, 说明)} 按行键规则
-    MATCH=引擎值直接可比；ANNUAL=2028/2029 全年列（年度合计对账）；
+    MATCH=引擎值直接可比；ANNUAL=2028 全年列（年度合计对账）；
     KNOWN_RULE_DIFF=用户确认口径差异；KNOWN_QUIRK=Excel 瑕疵期。
     """
     out: dict[str, tuple] = {}
@@ -237,7 +237,7 @@ def classify_cells(excel_key: str, cells: list[str], excel_sub: dict) -> dict:
         for p in cells:
             if _is_annual(p):
                 mark(p, "ANNUAL",
-                     "Excel 全年列含订阅收入（当年订阅目标 2461.2/6661.2）")
+                     "Excel 全年列含订阅收入（当年订阅目标 2461.2）")
 
     # --- 销售行瑕疵期 ---
     if y == "sale.online.amount":
@@ -342,7 +342,7 @@ def build_report(imp: dict, grid: dict, params: Params, salary_08: Decimal) -> t
     lines.append("  [KNOWN_RULE_DIFF 说明] 订阅：Excel 合计行计入订阅收入（当月销量口径），")
     lines.append("      引擎订阅为单独行（累计装机口径，用户确认）；差额=Excel 订阅行值。")
     lines.append("      支出：Excel=费用+整机采购（不含配件采购）；引擎=费用+全部采购（N+2 账期）。")
-    lines.append("      2028/2029：Excel 全年引用列；引擎按季节曲线月度化后年度合计对账。")
+    lines.append("      2028：Excel 全年引用列；引擎按季节曲线月度化后年度合计对账。")
     lines.append(f"分类统计：MATCH={categories['MATCH']}  KNOWN_QUIRK={categories['KNOWN_QUIRK']}  "
                  f"KNOWN_RULE_DIFF={categories['KNOWN_RULE_DIFF']}  BUG={categories['BUG']}")
     lines.append("结论：" + ("全部对齐（无未解释差异）" if not bugs else f"存在 {len(bugs)} 个未解释差异！"))

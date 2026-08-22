@@ -40,9 +40,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
-    # 期数边界（预测/规划起点 2026-08；2026-07 为已发生月，按财务报表实际值锚定）
+    # 期数边界（预测/规划起点 2026-08；最长三年 → 2028-12；2026-07 为已发生月，按财务报表实际值锚定）
     PERIOD_START: str = "2026-08"
-    PERIOD_END: str = "2029-12"
+    PERIOD_END: str = "2028-12"
 
     # 开发模拟登录开关（生产 compose 置 false，双保险关闭 dev-login）
     ENABLE_DEV_LOGIN: bool = True

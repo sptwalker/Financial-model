@@ -357,7 +357,7 @@ def apply_forecast(db: Session, scenario_id: int, base: list[dict], method: str,
 
     三情景=同情景三版本，按 lower→upper→base 顺序应用（base 中性留 latest）。
     每序列一次 recalc(inputs_override)，qty 随 inputs_json 快照持久（粘性回填）；
-    override 仅含 horizon（默认18期）→ 2028/2029 年度目标原样保留、仍由引擎季节曲线月度化。
+    override 仅含 horizon（默认18期）→ 2028 年度目标原样保留、仍由引擎季节曲线月度化。
     """
     tag = comment or "预测"
     lower_v = upper_v = None

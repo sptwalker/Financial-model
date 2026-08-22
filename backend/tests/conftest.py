@@ -12,7 +12,7 @@ from app.engine.reconcile import load_fixture  # noqa: E402
 
 @pytest.fixture(scope="session")
 def fixture():
-    """(imp, grid, params, salary_07)：2026-07..2029-12 全期间引擎 vs Excel"""
+    """(imp, grid, params, salary_07)：2026-07..2028-12 全期间引擎 vs Excel"""
     return load_fixture()
 
 

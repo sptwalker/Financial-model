@@ -250,7 +250,7 @@ export default function Dashboard({ user, onLogout }) {
           <section className="card">
             <h2>全部指标</h2>
             <p className="hint">
-              2028/2029 为年度目标（显示为全年合计在 12 月）；蓝色行可点击编辑。
+              2028 为年度目标（显示为全年合计在 12 月）；蓝色行可点击编辑。
             </p>
             <div className="row-summary">
               {ROW_GROUPS.map((g) => (

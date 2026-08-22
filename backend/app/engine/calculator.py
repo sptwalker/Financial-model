@@ -3,7 +3,7 @@
 口径（已与财务确认，2026-08 版）：
 - 销售：线上金额=线上台数×线上售价；线下金额=线下台数×线下售价；配件收入=总台数×0.5×200
 - 订阅：=累计装机量×0.7×200（即时到账）；2026-07 前装机初值=现金流量表数值（0）
-- 2028/2029 仅年度目标（存于该年 12 月行），用 2026-2027 季节曲线月度化
+- 2028 仅年度目标（存于该年 12 月行），用 2026-2027 季节曲线月度化
 - 回款：线上 [0.5,0.5]（当月50%+上月50%）；线下 [0,1]（N+1）；订阅/增值 [1]（即时）
 - 采购：整机+配件均 N+2=[0,0,1]，可配置 N+3
 - 费用：全部直接输入（kind=input），引擎不计算
@@ -127,7 +127,7 @@ def _d(x) -> Decimal:
 
 
 def periods_between(start: str, end: str) -> list[str]:
-    """'start'..'end'（含端点）逐月列表，如 '2026-08'..'2029-12'"""
+    """'start'..'end'（含端点）逐月列表，如 '2026-08'..'2028-12'"""
     y1, m1 = map(int, start.split("-"))
     y2, m2 = map(int, end.split("-"))
     out = []
@@ -232,7 +232,7 @@ def run(periods: list[str], params: Params,
     sales_targets = _row_year_targets(inputs, TARGET_SALES, periods)
     target_years = set(sales_targets)
     if sales_targets:
-        # 渠道拆分：从 2028/2029 线上/线下全年列（存于各渠道行 12 月槽）读取
+        # 渠道拆分：从 2028 线上/线下全年列（存于各渠道行 12 月槽）读取
         on_targets = _row_year_targets(inputs, QTY_ONLINE, periods)
         off_targets = _row_year_targets(inputs, QTY_OFFLINE, periods)
         hist_on = {p: inputs.get(QTY_ONLINE, {}).get(p, Decimal(0)) for p in periods}
@@ -314,7 +314,7 @@ def run(periods: list[str], params: Params,
                 (sale_offline[i - 1] + acc_offline[i - 1]) * p.channel_commission_rate
                 if i >= 1 else zero
             )
-    # 费用年度目标（2028/2029 全年值存于该年 12 月）：按季节曲线摊到全年
+    # 费用年度目标（2028 全年值存于该年 12 月）：按季节曲线摊到全年
     for row in EXPENSE_ROWS:
         annual_by_year = _row_year_targets(inputs, row, periods)
         if annual_by_year:

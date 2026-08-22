@@ -234,7 +234,7 @@ export default function Budget() {
                 ))}
               </div>
             )}
-            note="2028/2029 销量由年度目标驱动，逐月编辑对这两年可能被目标覆盖；乐观/悲观按销量整体 ±20%。" />
+            note="2028 销量由年度目标驱动，逐月编辑可能被目标覆盖；乐观/悲观按销量整体 ±20%。" />
 
           <Section title="研发预算（万元）" tone="rd" rows={RD}
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
