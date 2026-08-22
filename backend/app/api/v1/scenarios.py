@@ -12,9 +12,18 @@ from app.schemas.scenario import (
     RecalcRequest,
 )
 from app.services.operation_log_service import OperationLogService
-from app.services.recalc_service import recalc
+from app.services.recalc_service import recalc, preview_grid
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
+
+_RECALC_ERRORS = {
+    "scenario_not_found": (404, "情景不存在"),
+    "no_version": (404, "该情景尚未计算，请先导入或重算"),
+    "no_cells": (404, "该版本没有可重算的单元格"),
+    "no_input_cells": (404, "该版本没有可重算的单元格"),
+    "version_conflict_retry": (409, "并发重算冲突，请重试"),
+    "db_locked_retry": (409, "并发重算冲突，请重试"),
+}
 
 
 # ---------- 情景 ----------
@@ -160,17 +169,11 @@ def recalc_scenario(scenario_id: int, body: RecalcRequest, db: Session = Depends
     PermissionChecker.require_edit(current_user)
     try:
         result = recalc(db, scenario_id, params_override=body.params,
-                        comment=body.comment, user_id=current_user.id)
+                        comment=body.comment, user_id=current_user.id,
+                        inputs_override=body.inputs)
     except (ValueError, TypeError) as e:
-        if str(e) == "scenario_not_found":
-            raise HTTPException(status_code=404, detail="情景不存在")
-        if str(e) == "no_version":
-            raise HTTPException(status_code=404, detail="该情景尚未计算，请先导入或重算")
-        if str(e) == "no_cells":
-            raise HTTPException(status_code=404, detail="该版本没有可重算的单元格")
-        if str(e) in ("version_conflict_retry", "db_locked_retry"):
-            raise HTTPException(status_code=409, detail="并发重算冲突，请重试")
-        raise HTTPException(status_code=400, detail=f"重算失败: {e}")
+        code, detail = _RECALC_ERRORS.get(str(e), (400, f"重算失败: {e}"))
+        raise HTTPException(status_code=code, detail=detail)
     OperationLogService.log(db, action="scenario.recalc",
                             description=f"情景 {scenario_id} 重算 → 版本 {result['version_no']}",
                             detail={"scenario_id": scenario_id,
@@ -178,6 +181,22 @@ def recalc_scenario(scenario_id: int, body: RecalcRequest, db: Session = Depends
                                     "cell_count": result["cell_count"]},
                             user_id=current_user.id)
     return result
+
+
+@router.post("/{scenario_id}/recalc/preview")
+def recalc_preview(scenario_id: int, body: RecalcRequest, db: Session = Depends(get_db),
+                   current_user=Depends(get_current_user)):
+    """非持久化预览（登录即可）：叠加参数/输入增量实时重算 → 返回网格，不建版本。
+
+    预算页边改边预览用；返回形状同 get_grid 的 {scenario_id, cells}。
+    """
+    try:
+        cells = preview_grid(db, scenario_id, params_override=body.params,
+                             inputs_override=body.inputs)
+    except (ValueError, TypeError) as e:
+        code, detail = _RECALC_ERRORS.get(str(e), (400, f"预览失败: {e}"))
+        raise HTTPException(status_code=code, detail=detail)
+    return {"scenario_id": scenario_id, "cells": cells}
 
 
 # ---------- 单元格网格 ----------

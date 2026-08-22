@@ -56,6 +56,7 @@ CASH_IN = "cash.incoming"
 CASH_EXP = "cash.expense"
 CASH_GAP = "cash.gap"          # 本期缺口 = 回款 - 支出
 CASH_CLOSE = "cash.closing"
+CASH_FINANCING = "cash.financing"  # 投融资到账款（输入，特定月一次性注入现金，不摊分）
 
 # 费用行（万元/月）——全部输入
 EXPENSE_ROWS = [
@@ -86,6 +87,7 @@ COMPUTED_ROWS = frozenset({
 # 输入行全集
 INPUT_ROWS = frozenset({
     QTY_ONLINE, QTY_OFFLINE, HEADCOUNT, TARGET_SALES, TARGET_SUB, CASH_OPEN,
+    CASH_FINANCING,
     *EXPENSE_ROWS,
 })
 
@@ -324,11 +326,12 @@ def run(periods: list[str], params: Params,
     # ---------- 6. 现金滚动 ----------
     cash_open = [zero] * n
     cash_close = [zero] * n
+    financing = [inp(CASH_FINANCING, i) for i in range(n)]  # 投融资注入（不摊分）
     cash_exp = [exp_total[i] + pur_total[i] for i in range(n)]
     cash_gap = [col_total[i] - cash_exp[i] for i in range(n)]
     cash_open[0] = inp(CASH_OPEN, 0)
     for i in range(n):
-        cash_close[i] = cash_open[i] + cash_gap[i]
+        cash_close[i] = cash_open[i] + cash_gap[i] + financing[i]
         if i + 1 < n:
             cash_open[i + 1] = cash_close[i]
 

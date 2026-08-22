@@ -38,6 +38,7 @@ class CellWriteBatch(BaseModel):
 
 
 class RecalcRequest(BaseModel):
-    """重算请求：改参数后触发引擎重算，生成新版本"""
+    """重算/预览请求：改参数或覆盖输入后触发引擎重算"""
     comment: Optional[str] = None
     params: Optional[dict] = None  # 引擎参数增量（键=Params 字段名，如 price_online；不传则沿用快照）
+    inputs: Optional[dict] = None  # 输入行增量 {row_key: {period: 值}}（销量/费用/融资等；不传则沿用快照）

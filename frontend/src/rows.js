@@ -55,6 +55,12 @@ export const ROW_GROUPS = [
     ],
   },
   {
+    name: '投融资（万元）',
+    rows: [
+      { key: 'cash.financing', label: '到账融资款', editable: true },
+    ],
+  },
+  {
     name: '现金（万元）',
     rows: [
       { key: 'cash.opening', label: '期初现金', editable: true },
@@ -67,6 +73,51 @@ export const ROW_GROUPS = [
 ]
 
 export const ALL_ROW_KEYS = ROW_GROUPS.flatMap((g) => g.rows.map((r) => r.key))
+
+// 预算页成本重分组（研发/营销/运营管理）——独立于 ROW_GROUPS，不影响看板/全表
+export const BUDGET_COST_GROUPS = [
+  {
+    name: '研发',
+    rows: [
+      { key: 'exp.game_dev', label: '游戏外包开发' },
+      { key: 'exp.commercial_ip', label: '商业IP' },
+      { key: 'exp.license', label: '版号' },
+    ],
+  },
+  {
+    name: '营销',
+    rows: [
+      { key: 'exp.brand', label: '品牌宣传' },
+      { key: 'exp.channel_commission', label: '渠道佣金' },
+      { key: 'exp.channel_promo', label: '渠道推广费' },
+      { key: 'exp.online_promo', label: '线上推广费' },
+    ],
+  },
+  {
+    name: '运营管理',
+    rows: [
+      { key: 'exp.salary', label: '人力（工资）' },
+      { key: 'exp.headcount', label: '人数' },
+      { key: 'exp.rent', label: '房租' },
+      { key: 'exp.office_hw', label: '办公硬件' },
+      { key: 'exp.it_service', label: '信息技术服务' },
+      { key: 'exp.recruit', label: '招聘费' },
+      { key: 'exp.office_other', label: '办公及其他' },
+    ],
+  },
+]
+
+// 预算页销售设置：分渠道销量（inputs）+ 售价/采购成本标量（params）
+export const BUDGET_SALES_QTY = [
+  { key: 'qty.online', label: '线上销量', unit: '万台' },
+  { key: 'qty.offline', label: '线下销量', unit: '万台' },
+]
+export const BUDGET_SALES_PARAMS = [
+  { key: 'price_online', label: '线上平均售价（元/台）', step: '1' },
+  { key: 'price_offline', label: '线下平均售价（元/台）', step: '0.01' },
+  { key: 'cost_main', label: '整机采购成本（元/台）', step: '1' },
+  { key: 'cost_accessory', label: '单台配件采购成本（元）', step: '1' },
+]
 
 export function rowInfo(key) {
   for (const g of ROW_GROUPS) {

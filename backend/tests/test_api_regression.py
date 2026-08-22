@@ -90,7 +90,7 @@ def test_grid_returns_full_period_range(token, client):
     r = client.get("/api/v1/scenarios/1/grid", headers=_auth(token))
     assert r.status_code == 200
     cells = r.json()["cells"]
-    assert len(cells) == 37, f"行数异常: {len(cells)}"
+    assert len(cells) == 38, f"行数异常: {len(cells)}"
     per_row = {k: len(v) for k, v in cells.items()}
     bad = [k for k, n in per_row.items() if n != 41]
     assert not bad, f"行期折叠残留: {bad}"
@@ -111,7 +111,7 @@ def test_recalc_end_to_end(token, client):
                     headers=_auth(token), json={"params": {"price_online": "1999"}})
     assert r.status_code == 200, r.text
     v2 = r.json()
-    assert v2["version_no"] == 2 and v2["cell_count"] == 1517
+    assert v2["version_no"] == 2 and v2["cell_count"] == 1558
 
     r = client.get("/api/v1/scenarios/1/grid?version_no=2", headers=_auth(token))
     cells = r.json()["cells"]

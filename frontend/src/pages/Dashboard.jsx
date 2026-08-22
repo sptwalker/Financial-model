@@ -236,13 +236,13 @@ export default function Dashboard({ user, onLogout }) {
           </section>
 
           <section className="card">
-            <h2>销售额构成</h2>
-            <Chart option={salesOption} height={280} />
+            <h2>现金流水</h2>
+            <Chart option={cashOption} height={300} />
           </section>
 
           <section className="card">
-            <h2>现金流水</h2>
-            <Chart option={cashOption} height={300} />
+            <h2>销售额构成</h2>
+            <Chart option={salesOption} height={280} />
           </section>
 
           <ThreeScenarioCard scenarioId={scenarioId} />

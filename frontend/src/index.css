@@ -280,6 +280,19 @@ body {
   .modal-mask { place-items: center; }
 }
 
+/* ========== 预算页（budget-* 独立命名空间） ========== */
+.budget-metrics .live-dot {
+  display: inline-block; width: 6px; height: 6px; margin-left: 5px;
+  border-radius: 50%; background: var(--green); vertical-align: middle;
+}
+.budget-row { margin: 10px 0; }
+.budget-row-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+.budget-strip {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.budget-strip .edit-cell { flex: none; width: 76px; }
+
 /* ========== 预测页（fc-* 独立命名空间；移动优先，@640px 放出电脑端区块） ========== */
 .pc-only { display: none; }              /* 手机默认隐藏：导入导出/回测明细/三情景/缩放目标 */
 .fc-mobile { display: block; }           /* 手机专属：迷你概览/只读方法/一键接受 */

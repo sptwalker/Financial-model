@@ -8,7 +8,7 @@ import pytest
 
 from app.engine.calculator import Params
 from app.models.financial import Cell, ModelVersion, Scenario
-from app.services.recalc_service import recalc, merge_params
+from app.services.recalc_service import recalc, merge_params, preview_grid
 
 
 @pytest.fixture(scope="module")
@@ -92,3 +92,27 @@ def test_merge_params_layering():
     p2 = merge_params({"price_online": "1999"}, None)
     assert p2.price_online == Decimal("1999")
     assert p2.price_offline == base["price_offline"]
+
+
+def test_preview_does_not_persist(seeded):
+    """预览端点：叠加 inputs/params 实时算，不建版本；网格反映融资注入"""
+    db = seeded
+    before = _latest(db).version_no
+    p0 = "2026-08"
+    grid = preview_grid(db, 1, inputs_override={"cash.financing": {p0: "888"}})
+    # 未建新版本
+    assert _latest(db).version_no == before
+    # 融资行透传，且期末现金较无融资抬升 888
+    assert Decimal(grid["cash.financing"][p0]["value"]) == Decimal("888")
+    base_grid = preview_grid(db, 1)
+    assert (Decimal(grid["cash.closing"][p0]["value"])
+            - Decimal(base_grid["cash.closing"][p0]["value"])) == Decimal("888")
+
+
+def test_recalc_inputs_override_sticky(seeded):
+    """recalc 带 inputs_override → 新版本落库且融资值粘性写入网格"""
+    db = seeded
+    r = recalc(db, 1, inputs_override={"cash.financing": {"2026-09": "500"}},
+               comment="test: financing")
+    new = _grid(db, r["version_no"])
+    assert new["cash.financing|2026-09"] == Decimal("500")

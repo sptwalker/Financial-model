@@ -71,6 +71,65 @@ def rebuild_inputs(cells: list[Cell]) -> dict[str, dict[str, Decimal]]:
     return inputs
 
 
+def _load_baseline(db: Session, scenario_id: int) -> tuple[ModelVersion, dict, list[str]]:
+    """加载情景最新版本 → 重算基线 (latest, inputs, periods)。recalc 与 preview 共用。
+
+    inputs 基线 = inputs_json 快照（含全年目标摊月历史形状），否则从网格 input/override 重建；
+    并把本版本上 override 的单元格叠加到基线。periods = 该版本单元格覆盖的期间全集。
+    """
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise ValueError("scenario_not_found")
+    latest = (db.query(ModelVersion)
+              .filter(ModelVersion.scenario_id == scenario_id)
+              .order_by(ModelVersion.version_no.desc()).first())
+    if not latest:
+        raise ValueError("no_version")
+
+    cells = (db.query(Cell)
+             .filter(Cell.scenario_id == scenario_id,
+                     Cell.model_version == latest.version_no).all())
+    if not cells:
+        raise ValueError("no_cells")
+
+    inputs = {rk: {p: _coerce_decimal(v) for p, v in per.items()}
+              for rk, per in _parse_json(latest.inputs_json).items()}
+    if not inputs:
+        inputs = rebuild_inputs(cells)
+    else:
+        for c in cells:
+            if c.source == "override":
+                try:
+                    inputs.setdefault(c.row_key, {})[c.period] = Decimal(c.value)
+                except Exception:
+                    continue
+    if not inputs:
+        raise ValueError("no_input_cells")
+
+    periods = sorted({c.period for c in cells})
+    if not periods:
+        raise ValueError("no_input_cells")
+    return latest, inputs, periods
+
+
+def _apply_inputs_override(inputs: dict, inputs_override: dict | None) -> None:
+    """把输入行增量 {row_key: {period: 值}} 叠加到基线 inputs（原地）"""
+    for rk, per in (inputs_override or {}).items():
+        inputs.setdefault(rk, {}).update({p: _coerce_decimal(v) for p, v in per.items()})
+
+
+def preview_grid(db: Session, scenario_id: int, params_override: dict | None = None,
+                 inputs_override: dict | None = None) -> dict:
+    """非持久化预览：基线 ← 参数/输入增量 → run() → 网格（形状同 get_grid 的 cells，不写库）"""
+    latest, inputs, periods = _load_baseline(db, scenario_id)
+    _apply_inputs_override(inputs, inputs_override)
+    params = merge_params(_parse_json(latest.params_json), params_override)
+    grid = run(periods, params, inputs)
+    return {row: {p: {"value": str(c["value"]), "source": c["source"]}
+                  for p, c in per.items()}
+            for row, per in grid.items()}
+
+
 def recalc(db: Session, scenario_id: int, params_override: dict | None = None,
            comment: str | None = None, user_id: int | None = None,
            inputs_override: dict | None = None) -> dict:
@@ -94,45 +153,10 @@ def recalc(db: Session, scenario_id: int, params_override: dict | None = None,
 def _recalc_once(db: Session, scenario_id: int, params_override: dict | None,
                  comment: str | None, user_id: int | None,
                  inputs_override: dict | None = None) -> dict:
-    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
-    if not scenario:
-        raise ValueError("scenario_not_found")
-    latest = (db.query(ModelVersion)
-              .filter(ModelVersion.scenario_id == scenario_id)
-              .order_by(ModelVersion.version_no.desc()).first())
-    if not latest:
-        raise ValueError("no_version")
+    latest, inputs, periods = _load_baseline(db, scenario_id)
 
-    cells = (db.query(Cell)
-             .filter(Cell.scenario_id == scenario_id,
-                     Cell.model_version == latest.version_no).all())
-    if not cells:
-        raise ValueError("no_cells")
-
-    # 重算基线：优先 inputs_json 快照（含全年目标摊月所需历史形状），否则从网格重建
-    inputs = {rk: {p: _coerce_decimal(v) for p, v in per.items()}
-              for rk, per in _parse_json(latest.inputs_json).items()}
-    if not inputs:
-        inputs = rebuild_inputs(cells)
-    else:
-        # 用户在本版本上 override 过的单元格叠加到基线上
-        for c in cells:
-            if c.source == "override":
-                try:
-                    inputs.setdefault(c.row_key, {})[c.period] = Decimal(c.value)
-                except Exception:
-                    continue
-    if not inputs:
-        raise ValueError("no_input_cells")
-
-    # 预测回填等：直接覆写输入行（qty.online/offline），并入 inputs_json 快照 → 粘性
-    for rk, per in (inputs_override or {}).items():
-        inputs.setdefault(rk, {}).update({p: _coerce_decimal(v) for p, v in per.items()})
-
-    # periods 取该版本单元格覆盖的期间全集（原引擎 2026-07..2029-12 连续月度）
-    periods = sorted({c.period for c in cells})
-    if not periods:
-        raise ValueError("no_input_cells")
+    # 预测回填/预算编辑：直接覆写输入行，并入 inputs_json 快照 → 粘性
+    _apply_inputs_override(inputs, inputs_override)
 
     params = merge_params(_parse_json(latest.params_json), params_override)
     grid = run(periods, params, inputs)

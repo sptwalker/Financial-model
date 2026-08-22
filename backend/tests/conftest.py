@@ -20,7 +20,9 @@ def fixture():
 def reset_db_after_all_tests():
     """会话收尾：清掉各模块测试改写情景 1 / 历史表的残留（v5-7、forecast_runs、
     manual/import actuals），重跑 seed 恢复到纯净 v1，保证全量测试后 dev DB 不被污染。
-    模块级 seeded 只做前置复位、不做后置清理，因此必须以会话级兜底。"""
+    模块级 seeded 只做前置复位、不做后置清理，因此必须以会话级兜底。
+
+    seed_from_excel 就地更新「中性」(id 不漂移)，故预算克隆(2/3)不受影响、无需在此清理。"""
     yield
     from app.db.session import SessionLocal
     from app.models.financial import Cell, ModelVersion, Scenario

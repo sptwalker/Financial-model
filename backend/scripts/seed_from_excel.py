@@ -124,17 +124,19 @@ def main():
     init_db()
     db = SessionLocal()
     try:
-        # 幂等重置：删旧情景重写
-        old = db.query(Scenario).filter(Scenario.name == "中性").first()
-        if old:
-            db.query(Cell).filter(Cell.scenario_id == old.id).delete()
-            db.query(ModelVersion).filter(ModelVersion.scenario_id == old.id).delete()
-            db.delete(old)
+        # 幂等重置：就地清空「中性」的版本/单元格并复用同一 Scenario 行，
+        # 避免 delete+reinsert 令自增 id 漂移（预算克隆等其他情景占表时会拿到非 1 的 id）
+        scenario = db.query(Scenario).filter(Scenario.name == "中性").first()
+        if scenario:
+            db.query(Cell).filter(Cell.scenario_id == scenario.id).delete()
+            db.query(ModelVersion).filter(ModelVersion.scenario_id == scenario.id).delete()
+            scenario.description = "Excel「现金流中性」情景（2026.8 版数据）"
+            scenario.is_active = True
             db.commit()
-
-        scenario = Scenario(name="中性", description="Excel「现金流中性」情景（2026.8 版数据）",
-                            is_active=True)
-        db.add(scenario)
+        else:
+            scenario = Scenario(name="中性", description="Excel「现金流中性」情景（2026.8 版数据）",
+                                is_active=True)
+            db.add(scenario)
         db.flush()
 
         params_snapshot = json.dumps(asdict(params), ensure_ascii=False,

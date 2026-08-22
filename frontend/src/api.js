@@ -67,6 +67,12 @@ export async function recalc(scenarioId, payload = {}) {
   return data
 }
 
+// 非持久化预览：{params?, inputs?} → {scenario_id, cells}（不建版本，预算页边改边预览用）
+export async function previewRecalc(scenarioId, payload = {}) {
+  const { data } = await api.post(`/scenarios/${scenarioId}/recalc/preview`, payload)
+  return data
+}
+
 export async function releaseVersion(scenarioId, versionNo) {
   const { data } = await api.post(`/scenarios/${scenarioId}/versions/${versionNo}/release`)
   return data
