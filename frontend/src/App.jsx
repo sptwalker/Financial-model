@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Budget from './pages/Budget'
@@ -32,13 +32,14 @@ export default function App() {
 
 // 已登录布局：内容路由 + 底部 tab（移动优先）。切 tab 会重挂载 Dashboard → 自动拉最新版本
 function Shell({ user, onLogout }) {
+  const navigate = useNavigate()
   return (
     <div className="shell">
       <div className="shell-body">
         <Routes>
           <Route path="/" element={<Dashboard user={user} onLogout={onLogout} />} />
           <Route path="/budget" element={<Budget />} />
-          <Route path="/params" element={<Params />} />
+          <Route path="/params" element={<Params user={user} onImport={() => navigate('/')} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

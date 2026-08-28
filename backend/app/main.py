@@ -7,7 +7,7 @@ from app.db.base import Base
 from app.models import (  # noqa: F401  确保模型注册到 metadata
     User, OperationLog, Scenario, ModelVersion, Cell, SalesActual, ForecastRun,
 )
-from app.api.v1 import auth, users, scenarios, forecast
+from app.api.v1 import auth, users, scenarios, forecast, imports
 
 settings = get_settings()
 
@@ -29,6 +29,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(scenarios.router, prefix="/api/v1")
 app.include_router(forecast.router, prefix="/api/v1")
+app.include_router(imports.router, prefix="/api/v1")
 
 
 @app.on_event("startup")

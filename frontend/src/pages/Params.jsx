@@ -1,15 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { getVersions, listScenarios, recalc } from '../api'
+import { getVersions, listScenarios, recalc, importRebuild } from '../api'
 import { PARAM_FIELDS } from '../rows'
 
-export default function Params({ onRecalc }) {
+export default function Params({ user, onRecalc, onImport }) {
   const [scenarioId, setScenarioId] = useState(null)
   const [scenarios, setScenarios] = useState([])
   const [params, setParams] = useState(null)
   const [versionNo, setVersionNo] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [importMsg, setImportMsg] = useState(null)
+  const [importing, setImporting] = useState(false)
   const fetchSeq = useRef(0)
+  const importFiles = useRef({ main: null, payroll: null, report: null })
 
   // 切换情景时重新拉取该情景的参数快照与版本列表（防过期响应覆盖）
   const loadVersions = async (id) => {
@@ -77,6 +80,38 @@ export default function Params({ onRecalc }) {
     })
   }
 
+  const setImportFile = (key) => (e) => {
+    importFiles.current[key] = e.target.files?.[0] || null
+    setImportMsg(null)
+  }
+
+  const doImport = async () => {
+    const { main, payroll, report } = importFiles.current
+    if (!main || !payroll || !report) {
+      setImportMsg('请先选择 主表.xls + 工资表.xlsx + 财务报表.xlsx 三个文件')
+      return
+    }
+    if (!window.confirm('将清除并重建 中性/乐观/悲观 三个情景的基础数据（生成新 v1），确定继续？')) return
+    try {
+      setImporting(true)
+      setImportMsg('正在解析并重建…')
+      const r = await importRebuild({ main, payroll, report })
+      setImportMsg(`重建完成：${r.periods[0]}..${r.periods[1]}（${r.period_count} 期，${r.cells} 单元格）` +
+                   `${r.clones.length ? `；已克隆 → ${r.clones.map((c) => c.name).join('、')}` : '；未新增克隆'}`)
+      importFiles.current = { main: null, payroll: null, report: null }
+      // 刷新情景列表与当前版本快照；跳回看板展示新数据
+      const scs = await listScenarios()
+      setScenarios(scs)
+      const active = scs.find((s) => s.is_active) || scs[0]
+      setScenarioId(active ? active.id : null)
+      if (onImport) onImport()
+    } catch (e) {
+      setImportMsg('导入失败：' + String(e.response?.data?.detail || e.message))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className="page">
       <header className="app-header">
@@ -90,6 +125,31 @@ export default function Params({ onRecalc }) {
           <span className="version-chip">当前版本 v{versionNo ?? '-'}</span>
         </div>
       </header>
+
+      {user && user.role !== 'viewer' && (
+        <section className="card import-card">
+          <h2>导入表格 · 重建基础数据</h2>
+          <p className="hint">上传现金流测算 .xls 主表 + 工资表 .xlsx + 财务报表__202607期 .xlsx，重建「中性/乐观/悲观」三情景的基础数据（仅管理员/编辑可见）。</p>
+          <div className="import-files">
+            <label className="import-file">
+              <span className="import-file-label">主表（.xls）</span>
+              <input type="file" accept=".xls" onChange={setImportFile('main')} />
+            </label>
+            <label className="import-file">
+              <span className="import-file-label">工资表（.xlsx）</span>
+              <input type="file" accept=".xlsx" onChange={setImportFile('payroll')} />
+            </label>
+            <label className="import-file">
+              <span className="import-file-label">财务报表（.xlsx）</span>
+              <input type="file" accept=".xlsx" onChange={setImportFile('report')} />
+            </label>
+          </div>
+          <button className="btn primary" onClick={doImport} disabled={importing}>
+            {importing ? '导入中…' : '导入并重建'}
+          </button>
+          {importMsg && <div className="recalc-msg import-msg">{importMsg}</div>}
+        </section>
+      )}
 
       {msg && <div className="recalc-msg">{msg}</div>}
 

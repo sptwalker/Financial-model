@@ -29,7 +29,7 @@ from app.engine.calculator import run, Params  # noqa: E402
 from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.models.financial import Scenario, ModelVersion, Cell  # noqa: E402
 from app.models.forecast import SalesActual  # noqa: E402
-from scripts.fin_report import parse_report  # noqa: E402
+from app.services.fin_report import parse_report  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 XLS = BACKEND_DIR.parent / "docs" / "现金流测算 2026.8.xls"
