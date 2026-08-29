@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 
 from app.engine.calculator import Params, run
 from app.engine.excel_import import import_xls
-from app.engine.reconcile import payroll_total_payable
 from app.models.financial import Cell, ModelVersion, Scenario
 from app.models.forecast import SalesActual
 from app.services.fin_report import parse_report
@@ -117,9 +116,9 @@ def _truncate_existing_clones(db: Session) -> int:
 
 
 def rebuild_from_excel(db: Session, xls_path: str | Path,
-                       payroll_xlsx: str | Path, report_xlsx: str | Path,
+                       report_xlsx: str | Path,
                        user_id: int | None = None) -> dict:
-    """读取三个表格 → 重建基础数据（中性 v1 + 乐观/悲观克隆）→ 统计摘要。
+    """读取两个表格 → 重建基础数据（中性 v1 + 乐观/悲观克隆）→ 统计摘要。
 
     幂等：就地重建「中性」（复用 Scenario 行、清空其 cells/versions），
     避免 delete+reinsert 令自增 id 漂移；克隆三方案同样对齐新界。
@@ -133,15 +132,12 @@ def rebuild_from_excel(db: Session, xls_path: str | Path,
         inputs[row_key] = {p: v for p, v in inputs[row_key].items()
                            if not p.startswith("2026-07")}
 
-    salary_07 = payroll_total_payable(payroll_xlsx)   # 工资表应付合计（万）
     report = parse_report(report_xlsx)                # 报表实际值
     cash_opening_08 = report["cash_opening_wan"]      # 07-31 货币资金余额 → 08 期初
     exp_07 = report["expenses_wan"]                   # 07 月已发生费用（万）
 
     # 08 期初现金锚点 = 报表 07-31 实际余额（替代计划 450 万）
     inputs.setdefault("cash.opening", {})["2026-08"] = cash_opening_08
-    # 08 工资 = 工资表实际应付合计
-    inputs.setdefault("exp.salary", {})["2026-08"] = salary_07
     # 08 推广/办公费：计划 08 列空，按报表 07 实际值近似
     for key, v in exp_07.items():
         inputs.setdefault(key, {})["2026-08"] = v

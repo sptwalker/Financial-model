@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""导入重建端点测试：上传三件套 → 重建基础数据（中性 v1 + 乐观/悲观对齐）
+"""导入重建端点测试：上传两件套 → 重建基础数据（中性 v1 + 乐观/悲观对齐）
 
 验证：
-1. 端点接受 主表.xls + 工资表.xlsx + 财务报表.xlsx 三件套，重建后返回 1102 cells / 29 期
+1. 端点接受 主表.xls + 财务报表.xlsx 两件套，重建后返回 1102 cells / 29 期
 2. 重建后 /scenarios 返回 中性/乐观/悲观 三个情景，网格各 38 行 @ 2026-08..2028-12
 3. 破坏性操作权限：拒绝非 admin/editor（此处用 dev-login admin 通过，viewer 403）
 """
@@ -49,15 +49,12 @@ def client(seeded):
 
 
 def _files():
-    """打成 multipart 三件套；用 BytesIO 避免遗留文件句柄（Windows 会锁 docs）"""
+    """打成 multipart 两件套；用 BytesIO 避免遗留文件句柄（Windows 会锁 docs）"""
     from io import BytesIO
     return [
         ("file_main_xls", ("现金流测算 2026.8.xls",
                            BytesIO((DOCS / "现金流测算 2026.8.xls").read_bytes()),
                            "application/vnd.ms-excel")),
-        ("file_payroll_xlsx", ("2026年7月创想悦动工资表.xlsx",
-                               BytesIO((DOCS / "2026年7月创想悦动工资表.xlsx").read_bytes()),
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
         ("file_report_xlsx", ("财务报表__202607期.xlsx",
                               BytesIO((DOCS / "财务报表__202607期.xlsx").read_bytes()),
                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),

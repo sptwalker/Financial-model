@@ -45,6 +45,7 @@ export default function Budget() {
   const [preview, setPreview] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false)   // 首次情景拉取是否完成（区分「加载中」与「空库」）
   const fetchSeq = useRef(0)
   const timer = useRef(null)
 
@@ -75,6 +76,8 @@ export default function Budget() {
         if (neutral) { setNeutralId(neutral.id); load(neutral.id) }
       } catch (e) {
         setMsg(String(e.response?.data?.detail || e.message))
+      } finally {
+        setReady(true)
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,7 +209,9 @@ export default function Budget() {
       {msg && <div className="recalc-msg">{msg}</div>}
 
       {!baseGrid ? (
-        <div className="loading">加载中…</div>
+        ready && scenarios.length === 0
+          ? <div className="empty-hint">暂无基础数据，请前往<b>「设置」</b>页导入表格重建后再使用。</div>
+          : <div className="loading">加载中…</div>
       ) : (
         <>
           {metrics && (

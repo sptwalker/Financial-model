@@ -28,27 +28,25 @@ _XLSX_EXTS = (".xlsx",)
 
 @router.post("/rebuild")
 def rebuild(file_main_xls: UploadFile = File(...),
-            file_payroll_xlsx: UploadFile = File(...),
             file_report_xlsx: UploadFile = File(...),
             db: Session = Depends(get_db),
             current_user: User = Depends(get_current_user)):
-    """上传现金流测算.xls + 工资表.xlsx + 财务报表__202607期.xlsx → 重建基础数据（admin/editor）"""
+    """上传现金流测算.xls + 财务报表__202607期.xlsx → 重建基础数据（admin/editor）"""
     PermissionChecker.require_edit(current_user, action="导入重建", entity="基础数据")
 
     if not file_main_xls.filename.lower().endswith(_XLS_EXTS):
         raise HTTPException(status_code=400, detail="主表应为 .xls 文件（现金流测算 2026.8.xls）")
-    for f in (file_payroll_xlsx, file_report_xlsx):
-        if not f.filename.lower().endswith(_XLSX_EXTS):
-            raise HTTPException(status_code=400, detail=f"{f.filename} 应为 .xlsx 文件")
+    if not file_report_xlsx.filename.lower().endswith(_XLSX_EXTS):
+        raise HTTPException(status_code=400, detail=f"{file_report_xlsx.filename} 应为 .xlsx 文件")
 
-    # xlrd 只接受真实文件路径 → 主表写临时文件；两个 xlsx 直接交给 openpyxl 读流
+    # xlrd 只接受真实文件路径 → 主表写临时文件；xlsx 直接交给 openpyxl 读流
     try:
         with tempfile.NamedTemporaryFile(suffix=".xls", delete=False) as tmp:
             tmp.write(file_main_xls.file.read())
             xls_path = Path(tmp.name)
         try:
             result = rebuild_from_excel(db, xls_path,
-                                        file_payroll_xlsx.file, file_report_xlsx.file,
+                                        file_report_xlsx.file,
                                         user_id=current_user.id)
         finally:
             xls_path.unlink(missing_ok=True)

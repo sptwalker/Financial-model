@@ -102,11 +102,10 @@ export async function importActuals(file) {
   return data
 }
 
-// 前端导入重建基础数据：现金流测算.xls + 工资表.xlsx + 财务报表.xlsx
+// 前端导入重建基础数据：现金流测算.xls + 财务报表.xlsx
 export async function importRebuild(files) {
   const fd = new FormData()
   fd.append('file_main_xls', files.main)
-  fd.append('file_payroll_xlsx', files.payroll)
   fd.append('file_report_xlsx', files.report)
   const { data } = await api.post('/imports/rebuild', fd)
   return data

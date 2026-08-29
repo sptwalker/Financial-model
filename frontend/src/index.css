@@ -186,6 +186,8 @@ body {
 .import-msg { margin-top: 10px; margin-bottom: 0; }
 .import-card .btn { width: 100%; }
 .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+.empty-hint { text-align: center; color: var(--muted); padding: 40px 20px; line-height: 1.7; }
+.empty-hint b { color: var(--text); }
 .release-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   background: #f7f8fa; border: 1px solid var(--border); border-radius: 10px;

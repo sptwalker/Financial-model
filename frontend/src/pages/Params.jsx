@@ -11,8 +11,9 @@ export default function Params({ user, onRecalc, onImport }) {
   const [busy, setBusy] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const [importing, setImporting] = useState(false)
+  const [ready, setReady] = useState(false)   // 首次情景拉取是否完成（区分「加载中」与「空库」）
   const fetchSeq = useRef(0)
-  const importFiles = useRef({ main: null, payroll: null, report: null })
+  const importFiles = useRef({ main: null, report: null })
 
   // 切换情景时重新拉取该情景的参数快照与版本列表（防过期响应覆盖）
   const loadVersions = async (id) => {
@@ -37,6 +38,8 @@ export default function Params({ user, onRecalc, onImport }) {
         setScenarioId(active ? active.id : null)
       } catch (e) {
         setMsg(String(e.response?.data?.detail || e.message))
+      } finally {
+        setReady(true)
       }
     })()
   }, [])
@@ -86,16 +89,16 @@ export default function Params({ user, onRecalc, onImport }) {
   }
 
   const doImport = async () => {
-    const { main, payroll, report } = importFiles.current
-    if (!main || !payroll || !report) {
-      setImportMsg('请先选择 主表.xls + 工资表.xlsx + 财务报表.xlsx 三个文件')
+    const { main, report } = importFiles.current
+    if (!main || !report) {
+      setImportMsg('请先选择 主表.xls + 财务报表.xlsx 两个文件')
       return
     }
     if (!window.confirm('将清除并重建 中性/乐观/悲观 三个情景的基础数据（生成新 v1），确定继续？')) return
     try {
       setImporting(true)
       setImportMsg('正在解析并重建…')
-      const r = await importRebuild({ main, payroll, report })
+      const r = await importRebuild({ main, report })
       setImportMsg(`重建完成：${r.periods[0]}..${r.periods[1]}（${r.period_count} 期，${r.cells} 单元格）` +
                    `${r.clones.length ? `；已克隆 → ${r.clones.map((c) => c.name).join('、')}` : '；未新增克隆'}`)
       importFiles.current = { main: null, payroll: null, report: null }
@@ -129,15 +132,11 @@ export default function Params({ user, onRecalc, onImport }) {
       {user && user.role !== 'viewer' && (
         <section className="card import-card">
           <h2>导入表格 · 重建基础数据</h2>
-          <p className="hint">上传现金流测算 .xls 主表 + 工资表 .xlsx + 财务报表__202607期 .xlsx，重建「中性/乐观/悲观」三情景的基础数据（仅管理员/编辑可见）。</p>
+          <p className="hint">上传现金流测算 .xls 主表 + 财务报表__202607期 .xlsx，重建「中性/乐观/悲观」三情景的基础数据（仅管理员/编辑可见）。</p>
           <div className="import-files">
             <label className="import-file">
               <span className="import-file-label">主表（.xls）</span>
               <input type="file" accept=".xls" onChange={setImportFile('main')} />
-            </label>
-            <label className="import-file">
-              <span className="import-file-label">工资表（.xlsx）</span>
-              <input type="file" accept=".xlsx" onChange={setImportFile('payroll')} />
             </label>
             <label className="import-file">
               <span className="import-file-label">财务报表（.xlsx）</span>
@@ -154,7 +153,11 @@ export default function Params({ user, onRecalc, onImport }) {
       {msg && <div className="recalc-msg">{msg}</div>}
 
       {!params ? (
-        <div className="loading">加载中…</div>
+        ready && scenarios.length === 0
+          ? <div className="empty-hint">{user && user.role !== 'viewer'
+              ? <>暂无基础数据，请用上方<b>「导入表格·重建基础数据」</b>上传三张表格重建后再使用。</>
+              : <>暂无基础数据，请联系管理员导入表格重建。</>}</div>
+          : <div className="loading">加载中…</div>
       ) : (
         <>
           <section className="card">
