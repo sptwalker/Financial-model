@@ -35,14 +35,24 @@ class AuthService:
         user = UserService.get_by_feishu_id(self.db, feishu_user_id)
         if not user:
             role = UserService.resolve_role(feishu_user_id)
+            status_ = UserService.resolve_status(feishu_user_id)
             user = UserService.create(
                 self.db, feishu_user_id,
                 name=user_info.get("name", ""),
                 avatar_url=user_info.get("avatar_url"),
                 department=user_info.get("department", ""),
                 role=role,
-                status=UserStatus.ACTIVE,
+                status=status_,
             )
+            OperationLogService.log(
+                self.db, action="auth.register",
+                description=f"新用户 {user.name} 首次登录（状态：{user.status.value}）",
+                detail={"feishu_user_id": feishu_user_id, "role": role.value},
+                user_id=user.id, ip=request.client.host if request.client else None,
+            )
+        if user.status == UserStatus.PENDING:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="账号待管理员审批，请联系管理员放行后再登录")
         if user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已被禁用")
 

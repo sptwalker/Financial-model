@@ -126,6 +126,30 @@ export async function listForecastRuns(scenarioId) {
   return data
 }
 
+// ===== 管理员：用户管理 + 操作日志 =====
+export async function listUsers() {
+  const { data } = await api.get('/users')
+  return data
+}
+
+export async function updateUserRole(userId, role) {
+  const { data } = await api.patch(`/users/${userId}/role`, { role })
+  return data
+}
+
+export async function updateUserStatus(userId, status) {
+  const { data } = await api.patch(`/users/${userId}/status`, { status })
+  return data
+}
+
+export async function listLogs({ limit = 50, offset = 0, userId, action } = {}) {
+  const p = new URLSearchParams({ limit, offset })
+  if (userId != null) p.set('user_id', userId)
+  if (action) p.set('action', action)
+  const { data } = await api.get(`/users/logs?${p.toString()}`)
+  return data
+}
+
 export function fmt(n, digits = 0) {
   if (n === null || n === undefined || Number.isNaN(n)) return '—'
   return Number(n).toLocaleString('zh-CN', {

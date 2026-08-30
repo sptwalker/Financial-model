@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Budget from './pages/Budget'
 import Params from './pages/Params'
+import Admin from './pages/Admin'
 
 function loadUser() {
   try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
@@ -40,6 +41,7 @@ function Shell({ user, onLogout }) {
           <Route path="/" element={<Dashboard user={user} onLogout={onLogout} />} />
           <Route path="/budget" element={<Budget />} />
           <Route path="/params" element={<Params user={user} onImport={() => navigate('/')} />} />
+          {user.role === 'admin' && <Route path="/admin" element={<Admin user={user} />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -47,6 +49,7 @@ function Shell({ user, onLogout }) {
         <NavLink to="/budget">预算</NavLink>
         <NavLink to="/" end>看板</NavLink>
         <NavLink to="/params">设置</NavLink>
+        {user.role === 'admin' && <NavLink to="/admin">管理</NavLink>}
       </nav>
     </div>
   )

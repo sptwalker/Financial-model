@@ -34,10 +34,20 @@ app.include_router(imports.router, prefix="/api/v1")
 
 @app.on_event("startup")
 def on_startup():
-    """开发环境自动建表（生产用 alembic 迁移）"""
+    """开发环境自动建表（生产用 alembic 迁移）；按初始名单补升管理员/编辑"""
     if settings.DEBUG:
         from app.db.session import init_db
         init_db()
+    # 初始名单补升（覆盖「加此功能前已登录过」的用户；幂等）
+    from app.db.session import SessionLocal
+    from app.services.user_service import UserService
+    db = SessionLocal()
+    try:
+        n = UserService.sync_initial_roles(db)
+        if n:
+            print(f"[startup] 按初始名单补升 {n} 个用户为 admin/editor")
+    finally:
+        db.close()
 
 
 @app.get("/health")

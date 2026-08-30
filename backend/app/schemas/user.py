@@ -12,6 +12,7 @@ class UserOut(BaseModel):
     role: str
     status: str
     created_at: datetime | None = None
+    last_login_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -22,7 +23,22 @@ class UserRoleUpdate(BaseModel):
 
 
 class UserStatusUpdate(BaseModel):
-    status: str  # active / disabled
+    status: str  # pending / active / disabled
+
+
+class LogItem(BaseModel):
+    id: int
+    created_at: datetime | None = None
+    user_id: int | None = None
+    user_name: str | None = None
+    action: str
+    description: str | None = None
+    ip: str | None = None
+
+
+class LogPage(BaseModel):
+    items: list[LogItem]
+    total: int
 
 
 class LoginResponse(BaseModel):

@@ -12,6 +12,7 @@ class UserRole(str, enum.Enum):
 
 class UserStatus(str, enum.Enum):
     """用户准入状态枚举"""
+    PENDING = "pending"    # 待审批：首登后等待管理员放行（初始名单用户除外）
     ACTIVE = "active"      # 已启用：正常访问
     DISABLED = "disabled"  # 已禁用：被踢出
 
