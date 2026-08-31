@@ -24,12 +24,17 @@ from app.engine.excel_import import import_xls
 from app.models.financial import Cell, ModelVersion, Scenario
 from app.models.forecast import SalesActual
 from app.services.fin_report import parse_report
+from app.services.recalc_service import merge_params
 
 SRC_NAME = "中性"
+# 导入即差异化：克隆时对未来期销量套 ±20% 后重跑引擎（预算页可再细化）
 CLONES = [
-    ("乐观", "中性情景副本 · 乐观方案（预算页可细化销售/成本/投融资）"),
-    ("悲观", "中性情景副本 · 悲观方案（预算页可细化销售/成本/投融资）"),
+    ("乐观", "中性情景副本 · 乐观方案（未来期销量 ×1.2，预算页可再细化）", Decimal("1.2")),
+    ("悲观", "中性情景副本 · 悲观方案（未来期销量 ×0.8，预算页可再细化）", Decimal("0.8")),
 ]
+# 情景销量假设仅作用于未来期；已发生月（≤ 该界）保留中性实际值
+SCALE_FROM_PERIOD = "2026-09"
+QTY_KEYS = ("qty.online", "qty.offline")
 
 # 已发生月（发售起点 2026-07 起）；真实销量到位后逐月追加，预测只从 sales_actuals 读历史
 ACTUAL_MONTHS = ["2026-07", "2026-08"]
@@ -64,55 +69,76 @@ def _seed_actuals(db: Session, scenario: Scenario) -> int:
     return n
 
 
-def _clone(db: Session, src: Scenario, name: str, desc: str) -> tuple[str, int] | None:
-    """把源情景最新版本克隆为新情景（已存在则跳过）→ (name, cells)"""
-    if db.query(Scenario).filter(Scenario.name == name).first():
-        return None  # 已存在，跳过（不重复克隆）
+def _clone(db: Session, src: Scenario, name: str, desc: str,
+           factor: Decimal, periods: list[str]) -> tuple[str, int] | None:
+    """克隆源情景为差异化方案：未来期销量 ×factor 后重跑引擎 → (name, cells)。
+
+    差异只加在未来期（≥ SCALE_FROM_PERIOD）；已发生月保留中性实际销量。
+    重跑引擎使销售额/回款/现金流等下游行同步反映销量变化，语义与预算页保存一致。
+    factor==1 时退化为逐格克隆（不重算）。复用已存在的克隆 Scenario 行
+    （由 _reset_clones 先清空其 versions/cells），故重导入会刷新差异化。
+    """
     latest = (db.query(ModelVersion)
               .filter(ModelVersion.scenario_id == src.id)
               .order_by(ModelVersion.version_no.desc()).first())
     if not latest:
         return None
-    cells = (db.query(Cell)
-             .filter(Cell.scenario_id == src.id, Cell.model_version == latest.version_no).all())
-    dst = Scenario(name=name, description=desc, is_active=False, created_by=src.created_by)
-    db.add(dst)
+
+    # 从源版本快照还原 params/inputs，对未来期销量套系数后重算
+    params = merge_params(json.loads(latest.params_json or "{}"), None)
+    inputs = {k: {p: Decimal(str(val)) for p, val in per.items()}
+              for k, per in json.loads(latest.inputs_json or "{}").items()}
+    for qk in QTY_KEYS:
+        if qk in inputs:
+            for p in inputs[qk]:
+                if p >= SCALE_FROM_PERIOD:
+                    inputs[qk][p] = inputs[qk][p] * factor
+    grid = run(periods, params, inputs)
+
+    dst = db.query(Scenario).filter(Scenario.name == name).first()
+    if dst:
+        dst.description, dst.is_active = desc, False
+    else:
+        dst = Scenario(name=name, description=desc, is_active=False,
+                       created_by=src.created_by)
+        db.add(dst)
     db.flush()
+    inputs_snapshot = json.dumps(inputs, ensure_ascii=False, default=lambda o: str(o))
     db.add(ModelVersion(
         scenario_id=dst.id, version_no=1,
-        comment=f"克隆自「{SRC_NAME}」v{latest.version_no}",
+        comment=f"克隆自「{SRC_NAME}」v{latest.version_no}；未来期销量 ×{factor}",
         source="import",
-        params_json=latest.params_json, inputs_json=latest.inputs_json,
+        params_json=latest.params_json, inputs_json=inputs_snapshot,
         created_by=src.created_by,
     ))
-    db.bulk_save_objects([
-        Cell(scenario_id=dst.id, model_version=1, period=c.period,
-             row_key=c.row_key, value=c.value, source=c.source)
-        for c in cells
-    ])
+    cells = [
+        Cell(scenario_id=dst.id, model_version=1, period=p,
+             row_key=row_key, value=str(cell["value"]), source=cell["source"])
+        for row_key, per in grid.items()
+        for p, cell in per.items()
+    ]
+    db.bulk_save_objects(cells)
     db.commit()
     return name, len(cells)
 
 
-def _truncate_existing_clones(db: Session) -> int:
-    """克隆已存在时清理 2029 期单元格（预算法定期界 2028-12 起）→ 删除条数。
+def _reset_clones(db: Session) -> int:
+    """就地清空「乐观/悲观」的 versions/cells（保留 Scenario 行与 id）→ 清理条数。
 
-    中性重种子后，已有「乐观/悲观」仍带着旧 41 期网格；本函数把 2029 期的
-    单元格就地删除，使其与 2028-12 界对齐（版本行/inputs 快照保留，旧期间
-    自然越出期间轴不再生效）。
+    使重导入能按最新中性 + ±20% 逻辑重建克隆，而非保留旧平克隆。
     """
-    deleted = 0
-    for name, _desc in CLONES:
+    cleared = 0
+    for name, _desc, _f in CLONES:
         dst = db.query(Scenario).filter(Scenario.name == name).first()
         if not dst:
             continue
-        n = (db.query(Cell)
-             .filter(Cell.scenario_id == dst.id, Cell.period >= "2029-01")
-             .delete(synchronize_session=False))
-        deleted += n
-    if deleted:
+        cleared += db.query(Cell).filter(Cell.scenario_id == dst.id).delete(
+            synchronize_session=False)
+        db.query(ModelVersion).filter(ModelVersion.scenario_id == dst.id).delete(
+            synchronize_session=False)
+    if cleared:
         db.commit()
-    return deleted
+    return cleared
 
 
 def rebuild_from_excel(db: Session, xls_path: str | Path,
@@ -187,11 +213,11 @@ def rebuild_from_excel(db: Session, xls_path: str | Path,
 
     n_actual = _seed_actuals(db, scenario)
 
-    # 克隆乐观/悲观（先清理旧 2029 期，再按需克隆）
-    truncated = _truncate_existing_clones(db)
+    # 克隆乐观/悲观（先清空旧克隆，再按 ±20% 未来期销量重算重建）
+    truncated = _reset_clones(db)
     clone_res = []
-    for name, desc in CLONES:
-        r = _clone(db, scenario, name, desc)
+    for name, desc, factor in CLONES:
+        r = _clone(db, scenario, name, desc, factor, periods)
         if r:
             clone_res.append({"name": r[0], "cells": r[1]})
 
