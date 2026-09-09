@@ -274,9 +274,10 @@ body {
 }
 .edit-cell { display: flex; flex-direction: column; gap: 3px; }
 .edit-cell span { font-size: 11px; color: var(--muted); }
-.edit-cell input {
+.edit-cell input, .edit-cell select {
   padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px;
-  font-size: 13px; width: 100%;
+  font-size: 13px; width: 100%; height: 34px; box-sizing: border-box;
+  background: #fff;
 }
 
 /* ---------- 全量表格 ---------- */
@@ -345,6 +346,12 @@ body {
 /* 列数少（年/季）时放宽输入框，横向排满整行 */
 .budget-strip--wide .edit-cell { width: auto; flex: 1; min-width: 92px; }
 .budget-strip--wide .edit-cell input { min-width: 0; width: 100%; }
+
+/* 投融资：紧凑固定宽，不拉伸 */
+.budget-strip--fin { gap: 12px; align-items: flex-end; }
+.budget-strip--fin .edit-cell { flex: none; width: auto; }
+.budget-strip--fin .edit-cell input { width: 140px; }
+.budget-strip--fin .edit-cell select { width: 96px; }
 .budget-chart { margin-top: 4px; background: rgba(255, 255, 255, 0.6); border-radius: 10px; padding: 4px 2px; }
 
 @media (min-width: 640px) {

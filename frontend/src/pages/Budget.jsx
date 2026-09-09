@@ -333,7 +333,7 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
       {years.map(({ y, months }) => (
         <div className="budget-row" key={y}>
           <div className="budget-row-label">{y}年到账融资款</div>
-          <div className="budget-strip budget-strip--wide">
+          <div className="budget-strip budget-strip--fin">
             <label className="edit-cell">
               <span>金额（万）</span>
               <input type="number" step="1" value={Math.round(yearAmount(y, months)) || ''}
