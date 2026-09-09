@@ -94,7 +94,7 @@ export default function Budget() {
   }
   const groupVal = (row, months) => {
     const sum = months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0)
-    if (row === FINANCING) return Math.round(sum)                 // 融资款：整数
+    if (row === FINANCING) return Math.round(sum) || ''           // 融资款：整数，0 显示空（避免前导 0）
     return months.length === 1 ? effIn(row, months[0]) : r2(sum)
   }
   const setGroup = (row, months, v) => {
