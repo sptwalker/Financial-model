@@ -107,18 +107,28 @@ export default function Dashboard({ user, onLogout }) {
 
   const cashOption = useMemo(() => {
     if (!grid) return {}
+    const labels = axisLabels(periods)
     const line = (key, color, dash = false) => ({
       name: rowInfo(key)?.label || key,
       type: 'line', color, symbol: 'none',
       lineStyle: dash ? { width: 1.5, type: 'dashed' } : { width: 1.5 },
       data: periods.map((p) => Number(grid.cells[key]?.[p]?.value ?? 0)),
     })
+    // 融资款注入点：在现金流水图上标竖线 + 金额
+    const finRow = grid.cells['cash.financing'] || {}
+    const finMarks = periods
+      .map((p, i) => ({ p, i, v: Number(finRow[p]?.value ?? 0) }))
+      .filter((m) => m.v > 0)
+      .map((m) => ({
+        xAxis: labels[m.i],
+        label: { formatter: `融资 ${fmt(m.v, 0)}万`, fontSize: 9, color: '#9254de', position: 'insideEndTop' },
+      }))
     return {
       tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 2) },
       legend: { bottom: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },
       grid: { left: 44, right: 8, top: 12, bottom: 34, containLabel: true },
       xAxis: {
-        type: 'category', data: axisLabels(periods),
+        type: 'category', data: labels,
         axisLabel: { fontSize: 9, interval: 5 },
       },
       yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eee' } } },
@@ -126,7 +136,14 @@ export default function Dashboard({ user, onLogout }) {
         line('cash.incoming', '#4f8cff'),
         line('cash.expense', '#f54e5e'),
         line('cash.gap', '#f6bd16', true),
-        line('cash.closing', '#00b578'),
+        {
+          ...line('cash.closing', '#00b578'),
+          markLine: finMarks.length ? {
+            symbol: 'none', silent: true,
+            lineStyle: { color: '#9254de', type: 'dashed', width: 1.5 },
+            data: finMarks,
+          } : undefined,
+        },
       ],
     }
   }, [grid, periods])
