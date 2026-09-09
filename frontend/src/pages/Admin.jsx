@@ -167,7 +167,7 @@ export default function Admin({ user }) {
                 return (
                   <tr key={a.version_no}>
                     <td>v{a.version_no}</td>
-                    <td>{a.name}</td>
+                    <td className="arc-name" title={a.name}>{a.name}</td>
                     <td className="muted">{a.source === 'import' ? '导入' : '预算保存'}</td>
                     <td className="muted nowrap">{fmtTime(a.created_at)}</td>
                     <td>

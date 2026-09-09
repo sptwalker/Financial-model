@@ -475,6 +475,7 @@ body {
 .badge-disabled { background: #eef0f4; color: var(--gray); }
 
 .admin-actions { display: flex; gap: 6px; }
+.admin-table .arc-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-sm {
   padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px;
   background: #fff; color: var(--text); font-size: 12px; cursor: pointer;
