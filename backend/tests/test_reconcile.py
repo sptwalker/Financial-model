@@ -10,12 +10,11 @@ from app.engine.reconcile import (
     TOL, reconcile_rows, engine_value, annual_engine_sum,
 )
 
-# 2027-08..2027-12 当月订阅（Excel 行值）；2028 全年列 = 年度订阅目标
+# 2027-08..2027-12 当月订阅（Excel 行值，Excel 口径=当月销量×0.7×200，供口径对比）
 EXPECTED_SUB_MONTHLY = {
     "2027-08": Decimal("56"), "2027-09": Decimal("67.2"), "2027-10": Decimal("70"),
     "2027-11": Decimal("112"), "2027-12": Decimal("112"),
 }
-EXPECTED_SUB_ANNUAL = {2028: Decimal("2461.2")}
 
 
 def test_no_unexplained_differences(fixture):
@@ -28,11 +27,14 @@ def test_no_unexplained_differences(fixture):
 
 
 def test_match_count_baseline(fixture):
-    """分类计数与 M2 基线一致（防止分类器误改导致口径漂移）"""
+    """分类计数与基线一致（防止分类器误改导致口径漂移）。
+
+    订阅修复后：2028 订阅年度合计不再等于 Excel 目标 2461.2（改为累积口径），
+    该格由 MATCH 转入订阅行既有的 KNOWN_RULE_DIFF：324→323、56→57，BUG 仍为 0。"""
     imp, grid, params, salary_08 = fixture
     categories, bugs = reconcile_rows(imp, grid, params, [])
     assert (categories["MATCH"], categories["KNOWN_QUIRK"],
-            categories["KNOWN_RULE_DIFF"], categories["BUG"]) == (324, 73, 56, 0)
+            categories["KNOWN_RULE_DIFF"], categories["BUG"]) == (323, 73, 57, 0)
 
 
 def test_subscription_monthly_matches_excel(fixture):
@@ -44,13 +46,31 @@ def test_subscription_monthly_matches_excel(fixture):
         assert abs(Decimal(grid["sale.subscription.amount"][p]["value"]) - want) > TOL
 
 
-def test_subscription_annual_targets(fixture):
-    """2028 订阅 = 年度目标 2461.2（全年引用列）"""
+def test_subscription_accumulates_no_cliff(fixture):
+    """订阅=累计装机口径，单价 200 元/台/年 → 月度 ÷12，随新增装机逐月累积。
+
+    修复前：2028 全年被导入的年度订阅目标覆盖 → 断崖且不计新增用户。
+    修复后：全程月度非递减、2027→2028 无断崖、峰值在期末，
+    且逐期精确等于 累计 qty.total × 订阅率 × 200/12。"""
     imp, grid, params, salary_08 = fixture
-    excel_sub = imp["excel"]["sale.subscription.amount"]
-    for year, want in EXPECTED_SUB_ANNUAL.items():
-        assert float(excel_sub[f"{year}-12"]) == float(want)
-        assert abs(annual_engine_sum(grid, "sale.subscription.amount", year) - want) <= TOL
+    sub = grid["sale.subscription.amount"]
+    qty = grid["qty.total"]
+    periods = sorted(p for p in sub if len(p) == 7)
+    vals = [Decimal(sub[p]["value"]) for p in periods]
+
+    # 逐月非递减（装机只增不减）+ 峰值在期末（新增用户持续计入）
+    for a, b in zip(vals, vals[1:]):
+        assert b + TOL >= a
+    assert Decimal(sub["2028-12"]["value"]) == max(vals)
+    # 2027→2028 无断崖（旧 bug：2028-01 骤降到年度目标÷12 水平）
+    assert Decimal(sub["2028-01"]["value"]) + TOL >= Decimal(sub["2027-12"]["value"])
+
+    # 量纲精确校验：sale_sub[p] == 累计装机(∑qty.total) × 0.7 × 200/12
+    rate = params.sub_ratio * params.sub_revenue_per_unit / 12
+    cum = Decimal("0")
+    for p in periods:
+        cum += Decimal(qty[p]["value"])
+        assert abs(Decimal(sub[p]["value"]) - cum * rate) <= TOL, p
 
 
 def test_annual_reference_columns_exact(fixture):

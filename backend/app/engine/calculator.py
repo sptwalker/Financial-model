@@ -2,8 +2,8 @@
 
 口径（已与财务确认，2026-08 版）：
 - 销售：线上金额=线上台数×线上售价；线下金额=线下台数×线下售价；配件收入=总台数×0.5×200
-- 订阅：=累计装机量×0.7×200（即时到账）；2026-07 前装机初值=现金流量表数值（0）
-- 2028 仅年度目标（存于该年 12 月行），用 2026-2027 季节曲线月度化
+- 订阅：月度=累计装机量×0.7×(200/12)（单价 200 元/台/年，即时到账）；2026-07 前装机初值=现金流量表数值（0）；随新增装机持续累积，2028 不做年度目标覆盖
+- 硬件销量 2028 仅年度目标（存于该年 12 月行），用 2026-2027 季节曲线月度化
 - 回款：线上 [0.5,0.5]（当月50%+上月50%）；线下 [0,1]（N+1）；订阅/增值 [1]（即时）
 - 采购：整机+配件均 N+2=[0,0,1]，可配置 N+3
 - 费用：全部直接输入（kind=input），引擎不计算
@@ -106,7 +106,7 @@ class Params:
     acc_revenue_per_unit: Decimal = Decimal("200")  # 单台配件收入（元）
     # 订阅
     sub_ratio: Decimal = Decimal("0.7")            # 订阅比例
-    sub_revenue_per_unit: Decimal = Decimal("200")  # 单台订阅收益（元）
+    sub_revenue_per_unit: Decimal = Decimal("200")  # 单台订阅收益（元/台/年，月度收入 ÷12）
     # 营销费率
     online_mkt_rate: Decimal = Decimal("0.30")
     offline_mkt_rate: Decimal = Decimal("0.23")
@@ -222,9 +222,8 @@ def run(periods: list[str], params: Params,
     def inp(row: str, i: int) -> Decimal:
         return inputs.get(row, {}).get(periods[i], zero)
 
-    # 年度目标（存于各年 12 月）
+    # 年度目标（存于各年 12 月）——订阅不再用年度目标覆盖，改为始终累积口径
     sales_targets = _row_year_targets(inputs, TARGET_SALES, periods)
-    sub_targets = _row_year_targets(inputs, TARGET_SUB, periods)
 
     # ---------- 1. 销量：输入或年度目标季节化（线上/线下分渠道摊） ----------
     qty_online = [inp(QTY_ONLINE, i) for i in range(n)]
@@ -259,18 +258,16 @@ def run(periods: list[str], params: Params,
     acc_online = [q * p.acc_ratio * p.acc_revenue_per_unit for q in qty_online]
     acc_offline = [q * p.acc_ratio * p.acc_revenue_per_unit for q in qty_offline]
     sale_acc = [a + b for a, b in zip(acc_online, acc_offline)]
-    # 订阅：累计装机口径（装机初值=现金流量表数值 0）
+    # 订阅：累计装机口径，随新增装机逐月累积（装机初值=现金流量表数值 0）
+    # 单价 200 元为每台每年，月度订阅收入需 ÷12；2028 亦持续累积，不用年度目标覆盖
+    # （旧逻辑用导入的年度订阅目标覆盖 2028 全年 → 断崖且不计新增用户，已废弃）
     install = [p.install_base_initial]
     for i in range(n):
         install.append(install[-1] + qty_total[i])
-    sale_sub = [install[i + 1] * p.sub_ratio * p.sub_revenue_per_unit
+    # ÷12 产生循环小数，按 Decimal(20,8) 约定量化，避免尾数泄漏到现金合计
+    _q8 = Decimal("0.00000001")
+    sale_sub = [(install[i + 1] * p.sub_ratio * p.sub_revenue_per_unit / 12).quantize(_q8)
                 for i in range(n)]
-    # 订阅年度目标：覆盖该年全部月份（用 2026-2027 逐月订阅形状摊开）
-    if sub_targets:
-        target_years |= set(sub_targets)
-        hist_sub = {pp: sale_sub[j] for j, pp in enumerate(periods)}
-        w_sub = seasonal_weights(periods, hist_sub)
-        _monthlyize_row(sale_sub, periods, w_sub, set(sub_targets), sub_targets)
     sale_total = [a + b + c + d for a, b, c, d in
                   zip(sale_online, sale_offline, sale_acc, sale_sub)]
 
