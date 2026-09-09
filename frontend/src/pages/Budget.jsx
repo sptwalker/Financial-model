@@ -5,6 +5,7 @@ import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS } from '../ro
 
 const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
 const QTY_KEYS = new Set(BUDGET_SALES_QTY.map((r) => r.key))
+const FINANCING = 'cash.financing'                         // 融资款：整数、一次性注入不摊分
 const CHART_PALETTE = ['#4f8cff', '#5ad8a6', '#f6bd16', '#9254de', '#ff9f7f', '#5b8ff9', '#e86452']
 
 // 方案 = 中性基准 × 销量系数（乐观 +20% / 悲观 -20%），成本/融资不随方案变
@@ -91,10 +92,22 @@ export default function Budget() {
     if (e !== undefined) return e
     return baseGrid?.cells?.[row]?.[p]?.value ?? '0'
   }
-  const groupVal = (row, months) =>
-    months.length === 1 ? effIn(row, months[0])
-      : r2(months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0))
+  const groupVal = (row, months) => {
+    const sum = months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0)
+    if (row === FINANCING) return Math.round(sum)                 // 融资款：整数
+    return months.length === 1 ? effIn(row, months[0]) : r2(sum)
+  }
   const setGroup = (row, months, v) => {
+    // 融资款：整数，且年/季整额一次性注入该组首月（不摊分，往返无损）
+    if (row === FINANCING) {
+      const total = String(Math.round(Number(v || 0)))
+      setEdits((prev) => {
+        const next = { ...prev, [row]: { ...(prev[row] || {}) } }
+        months.forEach((p, i) => { next[row][p] = i === 0 ? total : '0' })
+        return next
+      })
+      return
+    }
     const each = months.length === 1 ? String(r2(Number(v || 0))) : String(r2(Number(v || 0) / months.length))
     setEdits((prev) => {
       const next = { ...prev, [row]: { ...(prev[row] || {}) } }
@@ -319,7 +332,7 @@ function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits,
             {groups.map((g) => (
               <label className="edit-cell" key={g.label}>
                 <span>{g.label}</span>
-                <input type="number" step="0.01" value={groupVal(r.key, g.months)}
+                <input type="number" step={r.key === FINANCING ? '1' : '0.01'} value={groupVal(r.key, g.months)}
                   onChange={(e) => setGroup(r.key, g.months, e.target.value)} />
               </label>
             ))}
