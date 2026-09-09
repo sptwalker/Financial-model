@@ -94,20 +94,9 @@ export default function Budget() {
   }
   const groupVal = (row, months) => {
     const sum = months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0)
-    if (row === FINANCING) return Math.round(sum) || ''           // 融资款：整数，0 显示空（避免前导 0）
     return months.length === 1 ? effIn(row, months[0]) : r2(sum)
   }
   const setGroup = (row, months, v) => {
-    // 融资款：整数，且年/季整额一次性注入该组首月（不摊分，往返无损）
-    if (row === FINANCING) {
-      const total = String(Math.round(Number(v || 0)))
-      setEdits((prev) => {
-        const next = { ...prev, [row]: { ...(prev[row] || {}) } }
-        months.forEach((p, i) => { next[row][p] = i === 0 ? total : '0' })
-        return next
-      })
-      return
-    }
     const each = months.length === 1 ? String(r2(Number(v || 0))) : String(r2(Number(v || 0) / months.length))
     setEdits((prev) => {
       const next = { ...prev, [row]: { ...(prev[row] || {}) } }
@@ -260,9 +249,7 @@ export default function Budget() {
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
           <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
-          <Section title="投融资（万元）" tone="fin" rows={[{ key: 'cash.financing', label: '到账融资款' }]}
-            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits}
-            note="到账融资款按月一次性注入现金，不做年度摊分。" />
+          <FinancingSection periods={periods} effIn={effIn} setEdits={setEdits} baseGrid={baseGrid} />
 
           <div className="action-row">
             <span className="hint">{dirty ? '已改动，指标为实时预览；点保存才落版本' : factor !== 1 ? '当前为方案预览' : '未改动'}</span>
@@ -286,7 +273,93 @@ function Metric({ label, value, unit, tone, live }) {
   )
 }
 
-// 一个预算分区：自带年/季/月粒度切换、逐行编辑、实时柱状图
+// 投融资：按年录入，每年指定一个到账月份（默认 12 月），一次性注入不摊分
+function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
+  const years = useMemo(() => {
+    const m = {}
+    for (const p of periods) {
+      const [y, mo] = p.split('-')
+      ;(m[y] = m[y] || []).push(mo)
+    }
+    return Object.entries(m).map(([y, months]) => ({ y, months }))
+  }, [periods])
+
+  const [monthByYear, setMonthByYear] = useState({})
+
+  const yearAmount = (y, months) =>
+    months.reduce((a, mo) => a + Number(effIn(FINANCING, `${y}-${mo}`) || 0), 0)
+
+  // 写入某年：所选月=整额，其余月清零（不摊分，往返无损）
+  const setFin = (y, months, month, amount) => {
+    const total = String(Math.round(Number(amount || 0)))
+    setEdits((prev) => {
+      const next = { ...prev, [FINANCING]: { ...(prev[FINANCING] || {}) } }
+      for (const mo of months) next[FINANCING][`${y}-${mo}`] = mo === month ? total : '0'
+      return next
+    })
+  }
+
+  // 初始化每年到账月份；历史被摊分的年份（>1 个非零月）合并到默认月并触发保存修正
+  useEffect(() => {
+    if (!baseGrid) return
+    const init = {}
+    const spread = []
+    for (const { y, months } of years) {
+      const nz = months.filter((mo) => Number(effIn(FINANCING, `${y}-${mo}`) || 0) !== 0)
+      const def = months.includes('12') ? '12' : months[months.length - 1]
+      init[y] = nz.length === 1 ? nz[0] : def
+      if (nz.length > 1) spread.push({ y, months, def })
+    }
+    setMonthByYear(init)
+    for (const { y, months, def } of spread) setFin(y, months, def, yearAmount(y, months))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [years, baseGrid])
+
+  const option = useMemo(() => ({
+    tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 0) },
+    grid: { left: 40, right: 8, top: 10, bottom: 8, containLabel: true },
+    xAxis: { type: 'category', data: years.map((g) => `${g.y.slice(2)}年`), axisLabel: { fontSize: 9 } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eef1f6' } } },
+    series: [{
+      name: '到账融资款', type: 'bar', itemStyle: { color: '#9254de' },
+      data: years.map((g) => Math.round(yearAmount(g.y, g.months))),
+    }],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [years, baseGrid, monthByYear, effIn])
+
+  return (
+    <section className="card budget-sec budget-sec--fin">
+      <div className="budget-sec-head"><h2>投融资（万元）</h2></div>
+      {years.map(({ y, months }) => (
+        <div className="budget-row" key={y}>
+          <div className="budget-row-label">{y}年到账融资款</div>
+          <div className="budget-strip budget-strip--wide">
+            <label className="edit-cell">
+              <span>金额（万）</span>
+              <input type="number" step="1" value={Math.round(yearAmount(y, months)) || ''}
+                onChange={(e) => setFin(y, months, monthByYear[y] || '12', e.target.value)} />
+            </label>
+            <label className="edit-cell">
+              <span>到账月份</span>
+              <select value={monthByYear[y] || '12'}
+                onChange={(e) => {
+                  setMonthByYear((m) => ({ ...m, [y]: e.target.value }))
+                  setFin(y, months, e.target.value, yearAmount(y, months))
+                }}>
+                {months.map((mo) => <option key={mo} value={mo}>{Number(mo)}月</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+      ))}
+      <div className="budget-chart"><Chart option={option} height={160} /></div>
+      <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+        每年融资款在指定月份一次性注入现金（默认 12 月），不做年度摊分。
+      </p>
+    </section>
+  )
+}
+
 function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits, factor = 1, top, note }) {
   const [gran, setGran] = useState('year')
   const groups = useMemo(() => periodGroups(periods, gran), [periods, gran])
