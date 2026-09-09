@@ -347,11 +347,14 @@ body {
 .budget-strip--wide .edit-cell { width: auto; flex: 1; min-width: 92px; }
 .budget-strip--wide .edit-cell input { min-width: 0; width: 100%; }
 
-/* 投融资：紧凑固定宽，不拉伸 */
-.budget-strip--fin { gap: 12px; align-items: flex-end; }
-.budget-strip--fin .edit-cell { flex: none; width: auto; }
-.budget-strip--fin .edit-cell input { width: 140px; }
-.budget-strip--fin .edit-cell select { width: 96px; }
+/* 投融资：三年一排，紧凑不拉伸 */
+.fin-year-row { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.fin-year { display: flex; align-items: center; gap: 6px; }
+.fin-year-label { font-size: 13px; font-weight: 500; color: var(--muted); }
+.fin-year input { width: 88px; height: 32px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; }
+.fin-year select { width: 68px; height: 32px; padding: 6px 6px; border: 1px solid var(--line);
+  border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; }
 .budget-chart { margin-top: 4px; background: rgba(255, 255, 255, 0.6); border-radius: 10px; padding: 4px 2px; }
 
 @media (min-width: 640px) {

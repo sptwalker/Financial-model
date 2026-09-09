@@ -299,19 +299,19 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
     })
   }
 
-  // 初始化每年到账月份；历史被摊分的年份（>1 个非零月）合并到默认月并触发保存修正
+  // 各年到账月份统一默认 12 月；不落在 12 月的历史数据（摊分或其它月）收敛到 12 月并标为已改动
   useEffect(() => {
     if (!baseGrid) return
     const init = {}
-    const spread = []
+    const toDec = []
     for (const { y, months } of years) {
+      init[y] = '12'
       const nz = months.filter((mo) => Number(effIn(FINANCING, `${y}-${mo}`) || 0) !== 0)
-      const def = months.includes('12') ? '12' : months[months.length - 1]
-      init[y] = nz.length === 1 ? nz[0] : def
-      if (nz.length > 1) spread.push({ y, months, def })
+      const amt = yearAmount(y, months)
+      if (amt !== 0 && !(nz.length === 1 && nz[0] === '12')) toDec.push({ y, months, amt })
     }
     setMonthByYear(init)
-    for (const { y, months, def } of spread) setFin(y, months, def, yearAmount(y, months))
+    for (const { y, months, amt } of toDec) setFin(y, months, '12', amt)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [years, baseGrid])
 
@@ -330,28 +330,22 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
   return (
     <section className="card budget-sec budget-sec--fin">
       <div className="budget-sec-head"><h2>投融资（万元）</h2></div>
-      {years.map(({ y, months }) => (
-        <div className="budget-row" key={y}>
-          <div className="budget-row-label">{y}年到账融资款</div>
-          <div className="budget-strip budget-strip--fin">
-            <label className="edit-cell">
-              <span>金额（万）</span>
-              <input type="number" step="1" value={Math.round(yearAmount(y, months)) || ''}
-                onChange={(e) => setFin(y, months, monthByYear[y] || '12', e.target.value)} />
-            </label>
-            <label className="edit-cell">
-              <span>到账月份</span>
-              <select value={monthByYear[y] || '12'}
-                onChange={(e) => {
-                  setMonthByYear((m) => ({ ...m, [y]: e.target.value }))
-                  setFin(y, months, e.target.value, yearAmount(y, months))
-                }}>
-                {months.map((mo) => <option key={mo} value={mo}>{Number(mo)}月</option>)}
-              </select>
-            </label>
+      <div className="fin-year-row">
+        {years.map(({ y, months }) => (
+          <div className="fin-year" key={y}>
+            <span className="fin-year-label">{y}年</span>
+            <input type="number" step="1" placeholder="金额" value={Math.round(yearAmount(y, months)) || ''}
+              onChange={(e) => setFin(y, months, monthByYear[y] || '12', e.target.value)} />
+            <select value={monthByYear[y] || '12'}
+              onChange={(e) => {
+                setMonthByYear((m) => ({ ...m, [y]: e.target.value }))
+                setFin(y, months, e.target.value, yearAmount(y, months))
+              }}>
+              {months.map((mo) => <option key={mo} value={mo}>{Number(mo)}月</option>)}
+            </select>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
       <div className="budget-chart"><Chart option={option} height={160} /></div>
       <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
         每年融资款在指定月份一次性注入现金（默认 12 月），不做年度摊分。
