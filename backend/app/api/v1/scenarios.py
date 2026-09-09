@@ -51,6 +51,89 @@ def create_scenario(body: ScenarioCreate, db: Session = Depends(get_db),
     return scenario
 
 
+# ---------- 预算存档（按 version_no 归并三情景的同批保存）----------
+# 一次预算保存 = 一个 version_no 横跨中性/乐观/悲观三情景；存档即按 version_no 归并
+# 注意：本组路由须在 /{scenario_id} 之前声明，否则 "archives" 会被当作情景 id
+
+from pydantic import BaseModel
+
+
+class ArchiveRename(BaseModel):
+    name: str
+
+
+def _archive_name(comment: str | None) -> str:
+    """存档显示名：去掉「预算调整 · 中性」里的情景后缀"""
+    if not comment:
+        return "（未命名）"
+    return comment.split(" · ")[0].strip() if " · " in comment else comment
+
+
+@router.get("/archives")
+def list_archives(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """预算存档列表（仅 admin）：按 version_no 归并，最新在前"""
+    PermissionChecker.require_admin(current_user)
+    rows = (db.query(ModelVersion)
+            .order_by(ModelVersion.version_no.desc(), ModelVersion.scenario_id).all())
+    by_no: dict[int, dict] = {}
+    for v in rows:
+        a = by_no.setdefault(v.version_no, {
+            "version_no": v.version_no,
+            "name": _archive_name(v.comment),
+            "source": v.source,
+            "created_at": v.created_at.isoformat() if v.created_at else None,
+            "released": False,
+            "scenarios": 0,
+        })
+        a["scenarios"] += 1
+        if v.released_at:
+            a["released"] = True
+    return {"archives": list(by_no.values())}
+
+
+@router.patch("/archives/{version_no}")
+def rename_archive(version_no: int, body: ArchiveRename, db: Session = Depends(get_db),
+                   current_user=Depends(get_current_user)):
+    """存档改名（仅 admin）：同批 version_no 的三情景版本注释统一改名"""
+    PermissionChecker.require_admin(current_user)
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="名称不能为空")
+    vs = db.query(ModelVersion).filter(ModelVersion.version_no == version_no).all()
+    if not vs:
+        raise HTTPException(status_code=404, detail="存档不存在")
+    for v in vs:
+        v.comment = name
+    db.commit()
+    OperationLogService.log(db, action="archive.rename",
+                            description=f"存档 v{version_no} 改名为「{name}」",
+                            user_id=current_user.id)
+    return {"ok": True, "version_no": version_no, "name": name}
+
+
+@router.delete("/archives/{version_no}")
+def delete_archive(version_no: int, db: Session = Depends(get_db),
+                   current_user=Depends(get_current_user)):
+    """删除存档（仅 admin）：连带三情景该 version_no 的版本与单元格。
+    已发布 / 导入基线 / 仅剩一个存档时禁止删除。"""
+    PermissionChecker.require_admin(current_user)
+    vs = db.query(ModelVersion).filter(ModelVersion.version_no == version_no).all()
+    if not vs:
+        raise HTTPException(status_code=404, detail="存档不存在")
+    if any(v.released_at for v in vs):
+        raise HTTPException(status_code=400, detail="该存档已发布，请先撤销发布再删除")
+    if any(v.source == "import" for v in vs):
+        raise HTTPException(status_code=400, detail="导入基线存档不可删除")
+    if db.query(ModelVersion.version_no).distinct().count() <= 1:
+        raise HTTPException(status_code=400, detail="至少保留一个存档")
+    db.query(Cell).filter(Cell.model_version == version_no).delete()
+    db.query(ModelVersion).filter(ModelVersion.version_no == version_no).delete()
+    db.commit()
+    OperationLogService.log(db, action="archive.delete",
+                            description=f"删除存档 v{version_no}", user_id=current_user.id)
+    return {"ok": True}
+
+
 @router.patch("/{scenario_id}", response_model=ScenarioOut)
 def update_scenario(scenario_id: int, body: ScenarioUpdate, db: Session = Depends(get_db),
                     current_user=Depends(get_current_user)):

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { listUsers, updateUserRole, updateUserStatus, listLogs } from '../api'
+import { listUsers, updateUserRole, updateUserStatus, listLogs,
+  listArchives, renameArchive, deleteArchive } from '../api'
 
 const ROLE_LABEL = { admin: '管理员', editor: '编辑', viewer: '查看' }
 const STATUS_LABEL = { pending: '待审批', active: '已启用', disabled: '已禁用' }
@@ -23,6 +24,37 @@ export default function Admin({ user }) {
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
 
+  // 预算存档
+  const [archives, setArchives] = useState([])
+
+  const loadArchives = async () => {
+    try { setArchives(await listArchives()) }
+    catch (e) { setMsg(String(e.response?.data?.detail || e.message)) }
+  }
+
+  const renameArc = async (a) => {
+    const name = window.prompt('存档名称', a.name)
+    if (name == null || name.trim() === '' || name.trim() === a.name) return
+    try {
+      setBusy(true); setMsg(null)
+      await renameArchive(a.version_no, name.trim())
+      setMsg(`已改名 v${a.version_no} → 「${name.trim()}」`)
+      await loadArchives()
+    } catch (e) { setMsg(String(e.response?.data?.detail || e.message)) }
+    finally { setBusy(false) }
+  }
+
+  const deleteArc = async (a) => {
+    if (!window.confirm(`删除存档 v${a.version_no}「${a.name}」？将同时删除中性/乐观/悲观三情景的该版本，不可恢复。`)) return
+    try {
+      setBusy(true); setMsg(null)
+      await deleteArchive(a.version_no)
+      setMsg(`已删除存档 v${a.version_no}`)
+      await loadArchives()
+    } catch (e) { setMsg(String(e.response?.data?.detail || e.message)) }
+    finally { setBusy(false) }
+  }
+
   const loadUsers = async () => {
     try { setUsers(await listUsers()) }
     catch (e) { setMsg(String(e.response?.data?.detail || e.message)) }
@@ -35,7 +67,7 @@ export default function Admin({ user }) {
     } catch (e) { setMsg(String(e.response?.data?.detail || e.message)) }
   }
 
-  useEffect(() => { loadUsers(); loadLogs(0) }, [])
+  useEffect(() => { loadUsers(); loadLogs(0); loadArchives() }, [])
 
   const changeRole = async (u, role) => {
     if (role === u.role) return
@@ -116,6 +148,44 @@ export default function Admin({ user }) {
                   </tr>
                 )
               })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>预算存档管理</h2>
+        <p className="hint">每次预算保存生成一个存档（含中性/乐观/悲观三情景同批版本）；可改名或删除。已发布与导入基线存档受保护。</p>
+        <div className="table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr><th>存档</th><th>名称</th><th>来源</th><th>时间</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              {archives.map((a) => {
+                const locked = a.released || a.source === 'import'
+                return (
+                  <tr key={a.version_no}>
+                    <td>v{a.version_no}</td>
+                    <td>{a.name}</td>
+                    <td className="muted">{a.source === 'import' ? '导入' : '预算保存'}</td>
+                    <td className="muted nowrap">{fmtTime(a.created_at)}</td>
+                    <td>
+                      {a.released && <span className="badge badge-active">已发布</span>}
+                      {a.source === 'import' && <span className="badge badge-pending">基线</span>}
+                      {!a.released && a.source !== 'import' && <span className="muted">—</span>}
+                    </td>
+                    <td className="admin-actions">
+                      <button className="btn-sm" disabled={busy} onClick={() => renameArc(a)}>改名</button>
+                      <button className="btn-sm danger" disabled={busy || locked}
+                        onClick={() => deleteArc(a)}>删除</button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {archives.length === 0 && (
+                <tr><td colSpan={6} className="muted" style={{ textAlign: 'center', padding: '20px' }}>暂无存档</td></tr>
+              )}
             </tbody>
           </table>
         </div>

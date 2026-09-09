@@ -150,6 +150,22 @@ export async function listLogs({ limit = 50, offset = 0, userId, action } = {}) 
   return data
 }
 
+// ===== 管理员：预算存档管理 =====
+export async function listArchives() {
+  const { data } = await api.get('/scenarios/archives')
+  return data.archives
+}
+
+export async function renameArchive(versionNo, name) {
+  const { data } = await api.patch(`/scenarios/archives/${versionNo}`, { name })
+  return data
+}
+
+export async function deleteArchive(versionNo) {
+  const { data } = await api.delete(`/scenarios/archives/${versionNo}`)
+  return data
+}
+
 export function fmt(n, digits = 0) {
   if (n === null || n === undefined || Number.isNaN(n)) return '—'
   return Number(n).toLocaleString('zh-CN', {
