@@ -155,7 +155,7 @@ export default function Admin({ user }) {
 
       <section className="card">
         <h2>预算存档管理</h2>
-        <p className="hint">每次预算保存生成一个存档（含中性/乐观/悲观三情景同批版本）；可改名或删除。已发布与导入基线存档受保护。</p>
+        <p className="hint">每次预算保存生成一个存档（含中性/乐观/悲观三情景同批版本）；可改名或删除。开启删除保护的存档与导入基线不可删除。</p>
         <div className="table-scroll">
           <table className="admin-table">
             <thead>
@@ -171,7 +171,7 @@ export default function Admin({ user }) {
                     <td className="muted">{a.source === 'import' ? '导入' : '预算保存'}</td>
                     <td className="muted nowrap">{fmtTime(a.created_at)}</td>
                     <td>
-                      {a.released && <span className="badge badge-active">已发布</span>}
+                      {a.released && <span className="badge badge-active">🔒 受保护</span>}
                       {a.source === 'import' && <span className="badge badge-pending">基线</span>}
                       {!a.released && a.source !== 'import' && <span className="muted">—</span>}
                     </td>

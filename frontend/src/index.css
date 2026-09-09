@@ -188,17 +188,12 @@ body {
 .loading { text-align: center; color: var(--muted); padding: 40px 0; }
 .empty-hint { text-align: center; color: var(--muted); padding: 40px 20px; line-height: 1.7; }
 .empty-hint b { color: var(--text); }
-.release-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  background: #f7f8fa; border: 1px solid var(--border); border-radius: 10px;
-  padding: 8px 12px; font-size: 13px; margin-bottom: 12px;
+.lock-toggle {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  font-size: 13px; color: var(--muted); white-space: nowrap; user-select: none;
 }
-.release-info { color: var(--muted); }
-.release-badge {
-  display: inline-block; margin-left: 8px; padding: 1px 8px;
-  background: #e7f8f0; color: var(--green); border-radius: 999px;
-  font-size: 12px; font-weight: 600;
-}
+.lock-toggle input { cursor: pointer; }
+.lock-toggle input:disabled { cursor: not-allowed; }
 
 /* ---------- 页脚 ---------- */
 .app-footer {

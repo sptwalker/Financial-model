@@ -121,7 +121,7 @@ def delete_archive(version_no: int, db: Session = Depends(get_db),
     if not vs:
         raise HTTPException(status_code=404, detail="存档不存在")
     if any(v.released_at for v in vs):
-        raise HTTPException(status_code=400, detail="该存档已发布，请先撤销发布再删除")
+        raise HTTPException(status_code=400, detail="该存档已开启删除保护，请先在看板取消勾选再删除")
     if any(v.source == "import" for v in vs):
         raise HTTPException(status_code=400, detail="导入基线存档不可删除")
     if db.query(ModelVersion.version_no).distinct().count() <= 1:

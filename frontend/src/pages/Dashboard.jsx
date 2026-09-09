@@ -161,14 +161,14 @@ export default function Dashboard({ user, onLogout }) {
     }
   }
 
-  async function toggleRelease(release) {
+  async function toggleRelease(on) {
     try {
-      setRecalcMsg(release ? '发布中…' : '撤销中…')
-      const fn = release ? releaseVersion : unreleaseVersion
+      setRecalcMsg(on ? '开启保护…' : '取消保护…')
+      const fn = on ? releaseVersion : unreleaseVersion
       await fn(scenarioId, versionNo)
       const { versions: vs } = await getVersions(scenarioId)
       setVersions(vs)
-      setRecalcMsg(release ? `已发布 v${versionNo}` : `已撤销发布 v${versionNo}`)
+      setRecalcMsg(on ? `已开启删除保护 v${versionNo}` : `已取消删除保护 v${versionNo}`)
     } catch (e) {
       setRecalcMsg('操作失败：' + String(e.response?.data?.detail || e.message))
     }
@@ -191,7 +191,6 @@ export default function Dashboard({ user, onLogout }) {
   const isAdmin = user?.role === 'admin'
   const currentVersion = versions.find((v) => v.version_no === versionNo)
   const isReleased = !!currentVersion?.released_at
-  const releasedVersion = versions.find((v) => v.released_at)
 
   return (
     <div className="page">
@@ -213,6 +212,12 @@ export default function Dashboard({ user, onLogout }) {
                 </option>
               ))}
             </select>
+            <label className="lock-toggle" title="勾选后此版本存档受删除保护，需取消勾选才能删除">
+              <input type="checkbox" checked={isReleased}
+                disabled={!isAdmin || versionNo == null}
+                onChange={(e) => toggleRelease(e.target.checked)} />
+              <span>{isReleased ? '🔒 ' : ''}删除保护</span>
+            </label>
           </div>
         </div>
         <div className="user-box">
@@ -223,21 +228,6 @@ export default function Dashboard({ user, onLogout }) {
 
       {error && <div className="error-banner">{error}</div>}
       {recalcMsg && <div className="recalc-msg">{recalcMsg}</div>}
-
-      <div className="release-bar">
-        <span className="release-info">
-          {releasedVersion
-            ? <>当前发布版本：<b>v{releasedVersion.version_no}</b>{isReleased ? '（正在查看）' : ''}</>
-            : '尚未发布任何版本'}
-          {isReleased && <span className="release-badge">已发布</span>}
-        </span>
-        {isAdmin && (
-          isReleased
-            ? <button className="link-btn" onClick={() => toggleRelease(false)}>撤销发布</button>
-            : <button className="link-btn" onClick={() => toggleRelease(true)}
-                disabled={versionNo == null}>发布此版本 v{versionNo}</button>
-        )}
-      </div>
 
       {loading && !grid ? (
         <div className="loading">加载中…</div>
