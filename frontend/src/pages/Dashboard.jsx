@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
-import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc,
+import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc,
   releaseVersion, unreleaseVersion } from '../api'
 import { ROW_GROUPS, BUDGET_COST_GROUPS, rowInfo, CASH_COLORS } from '../rows'
 import { TRIAL_KEY } from './Budget'
@@ -243,18 +243,6 @@ export default function Dashboard({ user, onLogout }) {
     }
   }, [grid, activeYear, periods])
 
-  async function doRecalc() {
-    try {
-      const r = await recalc(scenarioId, { comment: `看板重算（v${versionNo}）` })
-      setRecalcMsg(`已完成，新版本 v${r.version_no}`)
-      const { versions: vs } = await getVersions(scenarioId)
-      setVersions(vs)
-      setVersionNo(r.version_no)
-    } catch (e) {
-      setRecalcMsg('重算失败：' + String(e.response?.data?.detail || e.message))
-    }
-  }
-
   async function toggleRelease(on) {
     try {
       setRecalcMsg(on ? '开启保护…' : '取消保护…')
@@ -281,8 +269,6 @@ export default function Dashboard({ user, onLogout }) {
     }
   }
 
-  const isLatest = versionNo != null && versions.length > 0 && versionNo === versions[0].version_no
-  const canEdit = isLatest && !trial   // 试算预览为未保存状态，禁用编辑/重算
   const isAdmin = user?.role === 'admin'
   const currentVersion = versions.find((v) => v.version_no === versionNo)
   const isReleased = !!currentVersion?.released_at
@@ -367,15 +353,10 @@ export default function Dashboard({ user, onLogout }) {
             <Chart option={treemapOption} height={300} notMerge />
             <h3 className="sub-h">收入支出流向（万元）</h3>
             <Chart option={sankeyOption} height={340} notMerge />
-            <button className="btn" onClick={() => setShowTable(true)}>查看全部月份数据</button>
           </section>
 
-            {!isLatest && (
-              <p className="hint">当前查看的是历史版本，编辑与重算已锁定；请切换到最新版本（下拉框最上方）后操作。</p>
-            )}
-            <button className="btn primary recalc-btn" onClick={doRecalc}
-              disabled={recalcMsg === '计算中…' || !canEdit}>
-              用当前参数重算
+            <button className="btn primary recalc-btn" onClick={() => setShowTable(true)}>
+              查看全部月份数据
             </button>
         </>
       ) : null}
