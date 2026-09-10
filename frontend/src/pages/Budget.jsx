@@ -6,6 +6,12 @@ import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS } from '../ro
 
 const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
 export const TRIAL_KEY = 'budget_trial'                    // 试算暂存：看板据此预览未保存的当前页数值
+const DRAFT_KEY = 'budget_draft'                           // 预算页编辑草稿：切页/试算往返不丢失输入
+
+function loadDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') }
+  catch { return null }
+}
 
 // 默认版本名 = 日期+时间+版本号（用户可改）
 function defaultName(ver) {
@@ -69,12 +75,15 @@ export default function Budget() {
       setBaseGrid(g)
       const vno = versions[0]?.version_no ?? null
       setVersionNo(vno)
-      setSaveName(defaultName((vno ?? 0) + 1))
       const sp = {}
       for (const f of BUDGET_SALES_PARAMS) if (params?.[f.key] != null) sp[f.key] = params[f.key]
-      setSalesParams(sp)
       setBaseParams(sp)
-      setEdits({})
+      // 恢复草稿：切页/试算往返保留当前输入；无草稿则回落基线
+      const draft = loadDraft()
+      setSalesParams(draft?.salesParams ?? sp)
+      setEdits(draft?.edits ?? {})
+      setFactor(draft?.factor ?? 1)
+      setSaveName(draft?.saveName ?? defaultName((vno ?? 0) + 1))
       setPreview(null)
     } catch (e) {
       if (seq === fetchSeq.current) setMsg(String(e.response?.data?.detail || e.message))
@@ -170,6 +179,12 @@ export default function Budget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edits, salesParams, factor, neutralId, baseGrid])
 
+  // 持久化编辑草稿（切页/试算往返不丢失）；加载完成后才写，避免初始空态覆盖草稿
+  useEffect(() => {
+    if (!baseGrid) return
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ edits, salesParams, factor, saveName }))
+  }, [edits, salesParams, factor, saveName, baseGrid])
+
   const metrics = useMemo(() => {
     const cells = preview?.cells || baseGrid?.cells
     if (!cells || !periods.length) return null
@@ -201,7 +216,8 @@ export default function Budget() {
         })
         if (s.factor === 1) last = r
       }
-      localStorage.removeItem(TRIAL_KEY)  // 已落版本，清除试算暂存
+      localStorage.removeItem(TRIAL_KEY)   // 已落版本，清除试算暂存
+      localStorage.removeItem(DRAFT_KEY)   // 已落版本，清除编辑草稿
       setMsg(`已保存「${name}」：中性 v${last?.version_no}（乐观/悲观按 ±20% 同步）`)
       await load(neutralId)
     } catch (e) {
