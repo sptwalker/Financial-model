@@ -341,11 +341,11 @@ body {
 .edit-cell--pair { gap: 2px; }
 .edit-cell--pair .cell-head { display: flex; align-items: baseline; gap: 5px; }
 .edit-cell--pair .cell-head em { font-style: normal; }
-.edit-cell--pair .amt-head { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); }
-.edit-cell--pair .rate-head { flex: none; width: 55px; font-size: 11px; color: var(--blue); }
+.edit-cell--pair .amt-head { flex: 2; min-width: 0; font-size: 11px; color: var(--muted); }
+.edit-cell--pair .rate-head { flex: 1; min-width: 64px; font-size: 11px; color: var(--blue); }
 .edit-cell--pair .cell-body { display: flex; align-items: center; gap: 5px; }
-.edit-cell--pair .auto-val { flex: 1; min-width: 0; margin-top: 0; font-size: 12px; }
-.edit-cell--pair .cell-rate { flex: none; width: 55px; margin-top: 0; }
+.edit-cell--pair .auto-val { flex: 2; min-width: 0; margin-top: 0; font-size: 12px; }
+.edit-cell--pair .cell-rate { flex: 1; min-width: 64px; margin-top: 0; }
 
 /* 分区头 + 年/季/月切换 */
 .budget-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
