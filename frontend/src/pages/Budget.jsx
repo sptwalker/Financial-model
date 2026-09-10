@@ -1,9 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc } from '../api'
 import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS } from '../rows'
 
 const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
+export const TRIAL_KEY = 'budget_trial'                    // 试算暂存：看板据此预览未保存的当前页数值
+
+// 默认版本名 = 日期+时间+版本号（用户可改）
+function defaultName(ver) {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} v${ver}`
+}
 const QTY_KEYS = new Set(BUDGET_SALES_QTY.map((r) => r.key))
 const FINANCING = 'cash.financing'                         // 融资款：整数、一次性注入不摊分
 const CHART_PALETTE = ['#4f8cff', '#5ad8a6', '#f6bd16', '#9254de', '#ff9f7f', '#5b8ff9', '#e86452']
@@ -47,8 +56,10 @@ export default function Budget() {
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const [ready, setReady] = useState(false)   // 首次情景拉取是否完成（区分「加载中」与「空库」）
+  const [saveName, setSaveName] = useState('') // 版本名称（默认 日期+时间+版本号，可改）
   const fetchSeq = useRef(0)
   const timer = useRef(null)
+  const navigate = useNavigate()
 
   const load = async (id) => {
     const seq = ++fetchSeq.current
@@ -56,7 +67,9 @@ export default function Budget() {
       const [g, { versions, params }] = await Promise.all([getGrid(id), getVersions(id)])
       if (seq !== fetchSeq.current) return
       setBaseGrid(g)
-      setVersionNo(versions[0]?.version_no ?? null)
+      const vno = versions[0]?.version_no ?? null
+      setVersionNo(vno)
+      setSaveName(defaultName((vno ?? 0) + 1))
       const sp = {}
       for (const f of BUDGET_SALES_PARAMS) if (params?.[f.key] != null) sp[f.key] = params[f.key]
       setSalesParams(sp)
@@ -177,23 +190,37 @@ export default function Budget() {
       setBusy(true)
       setMsg('保存中…')
       const params = paramsPayload()
+      const name = saveName.trim() || defaultName((versionNo ?? 0) + 1)
       const byName = (n) => scenarios.find((s) => s.name === n)
       let last = null
       for (const s of SCENARIOS) {
         const sc = byName(s.name)
         if (!sc) continue
         const r = await recalc(sc.id, {
-          params, inputs: inputsPayload(s.factor), comment: `预算调整 · ${s.name}`,
+          params, inputs: inputsPayload(s.factor), comment: `${name} · ${s.name}`,
         })
         if (s.factor === 1) last = r
       }
-      setMsg(`已保存：中性 v${last?.version_no}（乐观/悲观按 ±20% 同步）`)
+      localStorage.removeItem(TRIAL_KEY)  // 已落版本，清除试算暂存
+      setMsg(`已保存「${name}」：中性 v${last?.version_no}（乐观/悲观按 ±20% 同步）`)
       await load(neutralId)
     } catch (e) {
       setMsg('保存失败：' + String(e.response?.data?.detail || e.message))
     } finally {
       setBusy(false)
     }
+  }
+
+  // 试算：按当前页数值为三情景各建预览载荷，暂存后跳看板（不落版本）
+  const trial = () => {
+    const byName = (n) => scenarios.find((s) => s.name === n)
+    const scen = {}
+    for (const s of SCENARIOS) {
+      const sc = byName(s.name)
+      if (sc) scen[sc.id] = { params: paramsPayload(), inputs: inputsPayload(s.factor) }
+    }
+    localStorage.setItem(TRIAL_KEY, JSON.stringify({ scenarios: scen }))
+    navigate('/')
   }
 
   return (
@@ -257,9 +284,12 @@ export default function Budget() {
           <FinancingSection periods={periods} effIn={effIn} setEdits={setEdits} baseGrid={baseGrid} />
 
           <div className="action-row">
-            <span className="hint">{dirty ? '已改动，指标为实时预览；点保存才落版本' : factor !== 1 ? '当前为方案预览' : '未改动'}</span>
+            <span className="hint">{dirty ? '已改动，指标为实时预览；试算看看板，保存才落版本' : factor !== 1 ? '当前为方案预览' : '未改动'}</span>
+            <input className="save-name" type="text" value={saveName} placeholder="版本名称"
+              onChange={(e) => setSaveName(e.target.value)} />
+            <button className="btn" onClick={trial} disabled={busy}>试算</button>
             <button className="btn primary" onClick={save} disabled={busy || !dirty}>
-              {busy ? '保存中…' : '保存为新版本'}
+              {busy ? '保存中…' : '保存'}
             </button>
           </div>
         </>

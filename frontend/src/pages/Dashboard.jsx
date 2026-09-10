@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
 import ThreeScenarioCard from '../components/ThreeScenarioCard'
-import { fmt, getGrid, getVersions, gridPeriods, listScenarios, putCells, recalc,
+import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, putCells, recalc,
   releaseVersion, unreleaseVersion } from '../api'
 import { ROW_GROUPS, rowInfo, CASH_COLORS } from '../rows'
+import { TRIAL_KEY } from './Budget'
 
 // 图表共用的 42 个月坐标轴标签：'26/07' 紧凑格式
 function axisLabels(periods) {
@@ -32,6 +33,8 @@ export default function Dashboard({ user, onLogout }) {
   const [recalcMsg, setRecalcMsg] = useState(null)
   const [showTable, setShowTable] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [trial, setTrial] = useState(false)   // 当前网格是否为预算页「试算」预览（未保存）
+  const [nonce, setNonce] = useState(0)        // 清除试算后强制重载
   const fetchSeq = useRef(0)
 
   useEffect(() => {
@@ -61,12 +64,22 @@ export default function Dashboard({ user, onLogout }) {
     let stale = false
     setLoading(true)
     setError(null)
-    getGrid(scenarioId, versionNo)
-      .then((g) => !stale && setGrid(g))
+    let tp = null
+    try {
+      const t = JSON.parse(localStorage.getItem(TRIAL_KEY) || 'null')
+      tp = t?.scenarios?.[scenarioId] || null
+    } catch { tp = null }
+    const req = tp
+      ? previewRecalc(scenarioId, tp).then((r) => ({ scenario_id: scenarioId, version_no: versionNo, cells: r.cells }))
+      : getGrid(scenarioId, versionNo)
+    req
+      .then((g) => { if (!stale) { setGrid(g); setTrial(!!tp) } })
       .catch((e) => !stale && setError(String(e.response?.data?.detail || e.message)))
       .finally(() => !stale && setLoading(false))
     return () => { stale = true }
-  }, [scenarioId, versionNo])
+  }, [scenarioId, versionNo, nonce])
+
+  const clearTrial = () => { localStorage.removeItem(TRIAL_KEY); setNonce((n) => n + 1) }
 
   const periods = useMemo(
     () => gridPeriods(grid),
@@ -188,6 +201,7 @@ export default function Dashboard({ user, onLogout }) {
   }
 
   const isLatest = versionNo != null && versions.length > 0 && versionNo === versions[0].version_no
+  const canEdit = isLatest && !trial   // 试算预览为未保存状态，禁用编辑/重算
   const isAdmin = user?.role === 'admin'
   const currentVersion = versions.find((v) => v.version_no === versionNo)
   const isReleased = !!currentVersion?.released_at
@@ -227,6 +241,12 @@ export default function Dashboard({ user, onLogout }) {
       </header>
 
       {error && <div className="error-banner">{error}</div>}
+      {trial && (
+        <div className="recalc-msg">
+          试算预览（未保存，来自预算页当前数值）
+          <button className="link-btn" onClick={clearTrial} style={{ marginLeft: 8 }}>清除试算，查看已保存版本</button>
+        </div>
+      )}
       {recalcMsg && <div className="recalc-msg">{recalcMsg}</div>}
 
       {loading && !grid ? (
@@ -267,7 +287,7 @@ export default function Dashboard({ user, onLogout }) {
                     const last = grid.cells[r.key]?.[periods[periods.length - 1]]
                     return (
                       <div className="row-line" key={r.key}
-                        onClick={() => r.editable && isLatest && setSelected(r.key)}>
+                        onClick={() => r.editable && canEdit && setSelected(r.key)}>
                         <span className="row-label">{r.label}</span>
                         <span className="row-val">
                           {fmt(last?.value)} {r.unit === '万台' ? '万台' : '万'}
@@ -285,7 +305,7 @@ export default function Dashboard({ user, onLogout }) {
               <p className="hint">当前查看的是历史版本，编辑与重算已锁定；请切换到最新版本（下拉框最上方）后操作。</p>
             )}
             <button className="btn primary recalc-btn" onClick={doRecalc}
-              disabled={recalcMsg === '计算中…' || !isLatest}>
+              disabled={recalcMsg === '计算中…' || !canEdit}>
               用当前参数重算
             </button>
         </>
@@ -298,7 +318,7 @@ export default function Dashboard({ user, onLogout }) {
 
       {selected && grid && (
         <RowEditor rowKey={selected} periods={periods} grid={grid}
-          onClose={() => setSelected(null)} scenarioId={scenarioId} isLatest={isLatest} />
+          onClose={() => setSelected(null)} scenarioId={scenarioId} isLatest={canEdit} />
       )}
       {showTable && (
         <FullTable periods={periods} grid={grid} onClose={() => setShowTable(false)} />
