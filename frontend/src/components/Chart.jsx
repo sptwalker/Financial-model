@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import * as echarts from 'echarts/core'
-import { BarChart, LineChart } from 'echarts/charts'
+import { BarChart, LineChart, TreemapChart, SankeyChart } from 'echarts/charts'
 import {
   GridComponent, TooltipComponent, LegendComponent, DataZoomComponent,
   MarkLineComponent, MarkAreaComponent,
@@ -8,13 +8,13 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 
 echarts.use([
-  BarChart, LineChart,
+  BarChart, LineChart, TreemapChart, SankeyChart,
   GridComponent, TooltipComponent, LegendComponent, DataZoomComponent,
   MarkLineComponent, MarkAreaComponent,
   CanvasRenderer,
 ])
 
-export default function Chart({ option, height = 300 }) {
+export default function Chart({ option, height = 300, notMerge = false }) {
   const ref = useRef(null)
   const chartRef = useRef(null)
 
@@ -33,8 +33,8 @@ export default function Chart({ option, height = 300 }) {
   }, [])
 
   useEffect(() => {
-    if (chartRef.current) chartRef.current.setOption(option)
-  }, [option])
+    if (chartRef.current) chartRef.current.setOption(option, { notMerge })
+  }, [option, notMerge])
 
   return <div ref={ref} style={{ width: '100%', height }} />
 }

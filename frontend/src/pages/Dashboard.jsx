@@ -1,10 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
-import ThreeScenarioCard from '../components/ThreeScenarioCard'
-import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, putCells, recalc,
+import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc,
   releaseVersion, unreleaseVersion } from '../api'
-import { ROW_GROUPS, rowInfo, CASH_COLORS } from '../rows'
+import { ROW_GROUPS, BUDGET_COST_GROUPS, rowInfo, CASH_COLORS } from '../rows'
 import { TRIAL_KEY } from './Budget'
+
+const r2 = (n) => Math.round(n * 100) / 100
+
+// 成本构成四大类（研发/营销/运营管理来自预算页分组，追加采购付款）
+const PURCHASE_GROUP = { name: '采购', rows: [
+  { key: 'purchase.main', label: '整机采购付款' },
+  { key: 'purchase.accessory', label: '配件采购付款' },
+] }
+const COST_GROUPS = [...BUDGET_COST_GROUPS, PURCHASE_GROUP]
+const CAT_COLORS = ['#4f8cff', '#f6bd16', '#00b578', '#e86452']
+// 桑基收入/成本节点键
+const SALE_NODES = [
+  ['线上销售', 'sale.online.amount'], ['线下销售', 'sale.offline.amount'],
+  ['配件收入', 'sale.accessory.amount'], ['订阅收入', 'sale.subscription.amount'],
+]
+const NODE_COLOR = {
+  线上销售: '#4f8cff', 线下销售: '#5ad8a6', 配件收入: '#f6bd16', 订阅收入: '#9254de',
+  总收入: '#1f2d3d', 研发: '#4f8cff', 营销: '#f6bd16', 运营管理: '#00b578', 采购: '#e86452',
+  经营结余: '#13c2a3', 资金缺口: '#f54e5e',
+}
 
 // 图表共用的 42 个月坐标轴标签：'26/07' 紧凑格式
 function axisLabels(periods) {
@@ -32,7 +51,7 @@ export default function Dashboard({ user, onLogout }) {
   const [error, setError] = useState(null)
   const [recalcMsg, setRecalcMsg] = useState(null)
   const [showTable, setShowTable] = useState(false)
-  const [selected, setSelected] = useState(null)
+  const [year, setYear] = useState(null)       // 成本构成/桑基图当前年份（null=默认首年）
   const [trial, setTrial] = useState(false)   // 当前网格是否为预算页「试算」预览（未保存）
   const [nonce, setNonce] = useState(0)        // 清除试算后强制重载
   const fetchSeq = useRef(0)
@@ -161,9 +180,71 @@ export default function Dashboard({ user, onLogout }) {
     }
   }, [grid, periods])
 
+  // 成本构成/桑基图：年份列表与当前年
+  const years = useMemo(() => [...new Set(periods.map((p) => p.slice(0, 4)))], [periods])
+  const activeYear = year || years[0]
+  // 某行在指定年的合计
+  const ysum = (key, y) => periods.reduce(
+    (a, p) => (p.slice(0, 4) === y ? a + Number(grid.cells[key]?.[p]?.value ?? 0) : a), 0)
+
+  // 矩形树状图：四大类 → 明细行，按当前年合计
+  const treemapOption = useMemo(() => {
+    if (!grid || !activeYear) return {}
+    const data = COST_GROUPS.map((cat, i) => ({
+      name: cat.name,
+      itemStyle: { color: CAT_COLORS[i % CAT_COLORS.length] },
+      children: cat.rows
+        .map((r) => ({ name: r.label, value: r2(ysum(r.key, activeYear)) }))
+        .filter((c) => c.value > 0),
+    })).filter((c) => c.children.length)
+    return {
+      tooltip: { formatter: (info) => `${info.name}：${fmt(info.value, 0)} 万元` },
+      series: [{
+        type: 'treemap', roam: false, nodeClick: false, width: '100%', height: '100%',
+        top: 4, bottom: 4, left: 4, right: 4,
+        breadcrumb: { show: false },
+        label: { fontSize: 11, formatter: (i) => `${i.name}\n${fmt(i.value, 0)}` },
+        upperLabel: { show: true, height: 18, fontSize: 11, color: '#fff' },
+        levels: [
+          { itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 } },
+          { itemStyle: { borderColor: '#fff', borderWidth: 1, gapWidth: 1 }, colorSaturation: [0.35, 0.55] },
+        ],
+        data,
+      }],
+    }
+  }, [grid, activeYear, periods])
+
+  // 桑基图（权责制）：四类销售额 → 总收入 → 研发/营销/运营管理/采购 + 经营结余
+  const sankeyOption = useMemo(() => {
+    if (!grid || !activeYear) return {}
+    const total = SALE_NODES.reduce((a, [, k]) => a + ysum(k, activeYear), 0)
+    const catVal = (cat) => cat.rows.reduce((a, r) => a + ysum(r.key, activeYear), 0)
+    const cats = COST_GROUPS.map((c) => [c.name, catVal(c)])
+    const balance = total - cats.reduce((a, [, v]) => a + v, 0)
+    const links = []
+    SALE_NODES.forEach(([n, k]) => { const v = ysum(k, activeYear); if (v > 0) links.push({ source: n, target: '总收入', value: r2(v) }) })
+    cats.forEach(([n, v]) => { if (v > 0) links.push({ source: '总收入', target: n, value: r2(v) }) })
+    if (balance > 0) links.push({ source: '总收入', target: '经营结余', value: r2(balance) })
+    else if (balance < 0) links.push({ source: '资金缺口', target: '总收入', value: r2(-balance) })
+    const names = [...new Set(links.flatMap((l) => [l.source, l.target]))]
+    const nodes = names.map((n) => ({ name: n, itemStyle: { color: NODE_COLOR[n] || '#8c8c8c' } }))
+    return {
+      tooltip: { trigger: 'item', formatter: (info) => (info.dataType === 'edge'
+        ? `${info.data.source} → ${info.data.target}：${fmt(info.data.value, 0)} 万`
+        : `${info.name}`) },
+      series: [{
+        type: 'sankey', top: 10, bottom: 10, left: 8, right: 90,
+        emphasis: { focus: 'adjacency' },
+        nodeWidth: 14, nodeGap: 10,
+        label: { fontSize: 11 },
+        lineStyle: { color: 'gradient', opacity: 0.45 },
+        data: nodes, links,
+      }],
+    }
+  }, [grid, activeYear, periods])
+
   async function doRecalc() {
     try {
-      setRecalcMsg('计算中…')
       const r = await recalc(scenarioId, { comment: `看板重算（v${versionNo}）` })
       setRecalcMsg(`已完成，新版本 v${r.version_no}`)
       const { versions: vs } = await getVersions(scenarioId)
@@ -272,32 +353,20 @@ export default function Dashboard({ user, onLogout }) {
             <Chart option={salesOption} height={280} />
           </section>
 
-          <ThreeScenarioCard scenarioId={scenarioId} />
-
           <section className="card">
-            <h2>全部指标</h2>
-            <p className="hint">
-              2028 为年度目标（显示为全年合计在 12 月）；蓝色行可点击编辑。
-            </p>
-            <div className="row-summary">
-              {ROW_GROUPS.map((g) => (
-                <div className="row-group" key={g.name}>
-                  <div className="row-group-title">{g.name}</div>
-                  {g.rows.map((r) => {
-                    const last = grid.cells[r.key]?.[periods[periods.length - 1]]
-                    return (
-                      <div className="row-line" key={r.key}
-                        onClick={() => r.editable && canEdit && setSelected(r.key)}>
-                        <span className="row-label">{r.label}</span>
-                        <span className="row-val">
-                          {fmt(last?.value)} {r.unit === '万台' ? '万台' : '万'}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              ))}
+            <div className="budget-sec-head">
+              <h2>成本构成</h2>
+              <div className="gran-toggle">
+                {years.map((y) => (
+                  <button key={y} className={activeYear === y ? 'on' : ''} onClick={() => setYear(y)}>{y.slice(2)}年</button>
+                ))}
+              </div>
             </div>
+            <p className="hint">按 {activeYear} 年合计；矩形树状图为成本构成（研发/营销/运营管理/采购），桑基图为收入→支出流向（权责制）。</p>
+            <h3 className="sub-h">成本构成（万元）</h3>
+            <Chart option={treemapOption} height={300} notMerge />
+            <h3 className="sub-h">收入支出流向（万元）</h3>
+            <Chart option={sankeyOption} height={340} notMerge />
             <button className="btn" onClick={() => setShowTable(true)}>查看全部月份数据</button>
           </section>
 
@@ -316,10 +385,6 @@ export default function Dashboard({ user, onLogout }) {
         <span>{periods.length ? `${periods[0]} ~ ${periods[periods.length - 1]}` : ''}</span>
       </footer>
 
-      {selected && grid && (
-        <RowEditor rowKey={selected} periods={periods} grid={grid}
-          onClose={() => setSelected(null)} scenarioId={scenarioId} isLatest={canEdit} />
-      )}
       {showTable && (
         <FullTable periods={periods} grid={grid} onClose={() => setShowTable(false)} />
       )}
@@ -333,74 +398,6 @@ function Stat({ label, value, sub, tone }) {
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       <div className="stat-sub">{sub}</div>
-    </div>
-  )
-}
-
-function RowEditor({ rowKey, periods, grid, scenarioId, isLatest, onClose }) {
-  const info = rowInfo(rowKey)
-  const [values, setValues] = useState(() => {
-    const out = {}
-    for (const p of periods) out[p] = grid.cells[rowKey]?.[p]?.value ?? ''
-    return out
-  })
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
-
-  const save = async () => {
-    try {
-      setSaving(true)
-      const cleared = periods.some((p) => values[p] === '' || values[p] === null || values[p] === undefined)
-      const cells = {}
-      for (const p of periods) {
-        if (!info.editable) continue
-        if (values[p] !== '' && values[p] !== null && values[p] !== undefined) {
-          cells[rowKey] = cells[rowKey] || {}
-          cells[rowKey][p] = String(values[p])
-        }
-      }
-      await putCells(scenarioId, cells)
-      setMsg(cleared
-        ? '已保存；空白格按“保持原值”处理，如需清零请输入 0'
-        : '已保存，点“重算”生效')
-    } catch (e) {
-      setMsg('保存失败：' + String(e.response?.data?.detail || e.message))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="modal-mask" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <strong>{info?.label}（{info?.group}）</strong>
-          <button className="link-btn" onClick={onClose}>关闭</button>
-        </div>
-        <div className="modal-body">
-          {info?.editable ? (
-            <>
-              <div className="hint">输入行：修改后保存 → 在总览点“用当前参数重算”生成新版本。</div>
-              <div className="edit-grid">
-                {periods.map((p) => (
-                  <label className="edit-cell" key={p}>
-                    <span>{p.slice(2)}</span>
-                    <input type="number" step="any" value={values[p] ?? ''}
-                      onChange={(e) => setValues({ ...values, [p]: e.target.value })} />
-                  </label>
-                ))}
-              </div>
-              {!isLatest && <div className="hint">当前为历史版本，只读。</div>}
-              <button className="btn primary" onClick={save} disabled={saving || !isLatest}>
-                {saving ? '保存中…' : '保存'}
-              </button>
-              {msg && <div className="recalc-msg">{msg}</div>}
-            </>
-          ) : (
-            <div className="hint">该行为引擎计算结果，只读（如需修改请调整上游输入或参数）。</div>
-          )}
-        </div>
-      </div>
     </div>
   )
 }
