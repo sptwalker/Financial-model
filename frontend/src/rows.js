@@ -89,8 +89,8 @@ export const BUDGET_COST_GROUPS = [
     rows: [
       { key: 'exp.brand', label: '品牌宣传' },
       { key: 'exp.channel_commission', label: '渠道佣金' },
-      { key: 'exp.channel_promo', label: '渠道推广费' },
-      { key: 'exp.online_promo', label: '线上推广费' },
+      { key: 'exp.channel_promo', label: '渠道推广费（万元）' },
+      { key: 'exp.online_promo', label: '线上推广费（万元）' },
     ],
   },
   {

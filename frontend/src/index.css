@@ -329,14 +329,23 @@ body {
 /* 年份金额下方内嵌的该年系数微调（带上下箭头） */
 .cell-rate { display: flex; align-items: center; gap: 3px; margin-top: 1px; }
 .cell-rate input {
-  flex: 1; min-width: 0; height: 28px; padding: 3px 5px; border: 1px solid var(--line);
+  flex: none; width: 44px; height: 28px; padding: 3px 4px; border: 1px solid var(--line);
   border-radius: 7px; font-size: 12px; background: #fff; box-sizing: border-box;
   text-align: right; font-variant-numeric: tabular-nums;
 }
 .cell-rate input:focus { outline: none; border-color: var(--blue); }
 .cell-rate em { font-style: normal; font-size: 11px; color: var(--muted); }
-/* 营销自动行：金额+系数框收窄，三年均匀排满一行 */
-.budget-strip--auto.budget-strip--wide .edit-cell { min-width: 76px; max-width: 168px; }
+
+/* 营销自动行：金额框(约一半宽) + 系数框(约三字符) 并排一行 */
+.budget-strip--auto.budget-strip--wide .edit-cell { min-width: 132px; max-width: 210px; }
+.edit-cell--pair { gap: 2px; }
+.edit-cell--pair .cell-head { display: flex; align-items: baseline; gap: 5px; }
+.edit-cell--pair .cell-head em { font-style: normal; }
+.edit-cell--pair .amt-head { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); }
+.edit-cell--pair .rate-head { flex: none; width: 63px; font-size: 11px; color: var(--blue); }
+.edit-cell--pair .cell-body { display: flex; align-items: center; gap: 5px; }
+.edit-cell--pair .auto-val { flex: 1; min-width: 0; margin-top: 0; font-size: 12px; }
+.edit-cell--pair .cell-rate { flex: none; width: 63px; margin-top: 0; }
 
 /* 分区头 + 年/季/月切换 */
 .budget-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
