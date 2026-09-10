@@ -206,16 +206,22 @@ export default function Budget() {
   const metrics = useMemo(() => {
     const cells = preview?.cells || baseGrid?.cells
     if (!cells || !periods.length) return null
-    const sum = (k) => periods.reduce((a, p) => a + Number(cells[k]?.[p]?.value ?? 0), 0)
-    const sumRows = (rows) => rows.reduce((a, r) => a + sum(r.key), 0)
-    return {
-      qty: sum('qty.total'),
-      sale: sum('sale.total.amount'),
-      rd: sumRows(RD),
-      mkt: sumRows(MKT),
-      admin: sumRows(ADMIN),
-      financing: sum('cash.financing'),
-    }
+    const years = [...new Set(periods.map((p) => p.slice(0, 4)))]
+    const sumIn = (ps, k) => ps.reduce((a, p) => a + Number(cells[k]?.[p]?.value ?? 0), 0)
+    const rowsIn = (ps, rows) => rows.reduce((a, r) => a + sumIn(ps, r.key), 0)
+    const defs = [
+      { label: '预期总销售量', unit: '万台', tone: 'blue', dp: 1, fn: (ps) => sumIn(ps, 'qty.total') },
+      { label: '预期总销售额', unit: '万元', tone: 'blue', dp: 0, fn: (ps) => sumIn(ps, 'sale.total.amount') },
+      { label: '研发总预算', unit: '万元', tone: 'purple', dp: 0, fn: (ps) => rowsIn(ps, RD) },
+      { label: '营销总预算', unit: '万元', tone: 'orange', dp: 0, fn: (ps) => rowsIn(ps, MKT) },
+      { label: '管理总预算', unit: '万元', tone: 'green', dp: 0, fn: (ps) => rowsIn(ps, ADMIN) },
+      { label: '总融资额', unit: '万元', tone: 'gray', dp: 0, fn: (ps) => sumIn(ps, 'cash.financing') },
+    ]
+    return defs.map((d) => ({
+      label: d.label, unit: d.unit, tone: d.tone,
+      total: fmt(d.fn(periods), d.dp),
+      years: years.map((y) => ({ y: y.slice(2), v: fmt(d.fn(periods.filter((p) => p.slice(0, 4) === y)), d.dp) })),
+    }))
   }, [preview, baseGrid, periods])
 
   const save = async () => {
@@ -283,12 +289,10 @@ export default function Budget() {
         <>
           {metrics && (
             <section className="stats-grid budget-metrics">
-              <Metric label="预期总销售量" unit="万台" value={fmt(metrics.qty, 1)} tone="blue" live={!!preview} />
-              <Metric label="预期总销售额" unit="万元" value={fmt(metrics.sale, 0)} tone="blue" live={!!preview} />
-              <Metric label="研发总预算" unit="万元" value={fmt(metrics.rd, 0)} tone="purple" live={!!preview} />
-              <Metric label="营销总预算" unit="万元" value={fmt(metrics.mkt, 0)} tone="orange" live={!!preview} />
-              <Metric label="管理总预算" unit="万元" value={fmt(metrics.admin, 0)} tone="green" live={!!preview} />
-              <Metric label="总融资额" unit="万元" value={fmt(metrics.financing, 0)} tone="gray" live={!!preview} />
+              {metrics.map((m) => (
+                <Metric key={m.label} label={m.label} unit={m.unit} value={m.total}
+                  tone={m.tone} live={!!preview} years={m.years} />
+              ))}
             </section>
           )}
 
@@ -334,12 +338,22 @@ export default function Budget() {
   )
 }
 
-function Metric({ label, value, unit, tone, live }) {
+function Metric({ label, value, unit, tone, live, years }) {
   return (
     <div className={`stat stat-${tone}`}>
       <div className="stat-label">{label}{live && <span className="live-dot" />}</div>
       <div className="stat-value">{value}</div>
       <div className="stat-sub">{unit}</div>
+      {years?.length > 0 && (
+        <div className="stat-years">
+          {years.map((yr) => (
+            <div className="stat-year" key={yr.y}>
+              <span className="sy-label">{yr.y}年</span>
+              <span className="sy-val">{yr.v}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

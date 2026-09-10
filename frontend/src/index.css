@@ -301,6 +301,17 @@ body {
   display: inline-block; width: 6px; height: 6px; margin-left: 5px;
   border-radius: 50%; background: var(--green); vertical-align: middle;
 }
+/* 总量下的各年度子项：缩进 + 顶部分隔线表示从属，标签左/数值右对齐 */
+.stat-years {
+  margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.stat-year {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; padding-left: 6px;
+}
+.sy-label { color: var(--muted); }
+.sy-val { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
 
 /* 方案切换（乐观/中性/悲观） */
 .budget-scenarios { display: flex; gap: 6px; }
