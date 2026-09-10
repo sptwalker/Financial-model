@@ -131,7 +131,7 @@ export default function Budget() {
   }
   const groupVal = (row, months) => {
     const sum = months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0)
-    return months.length === 1 ? effIn(row, months[0]) : r2(sum)
+    return months.length === 1 ? r2(Number(effIn(row, months[0]) || 0)) : r2(sum)
   }
   const setGroup = (row, months, v) => {
     const total = Number(v || 0)
@@ -459,7 +459,7 @@ function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits,
   const cellVal = (key, p) => (autoRows.has(key) && autoIn ? autoIn(key, p) : effIn(key, p))
   const gVal = (key, months) => {
     const sum = months.reduce((a, p) => a + Number(cellVal(key, p) || 0), 0)
-    return months.length === 1 ? cellVal(key, months[0]) : r2(sum)
+    return months.length === 1 ? r2(Number(cellVal(key, months[0]) || 0)) : r2(sum)
   }
 
   const option = useMemo(() => {

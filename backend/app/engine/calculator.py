@@ -251,14 +251,23 @@ def run(periods: list[str], params: Params,
         w_on = seasonal_weights(periods, hist_on)
         w_off = seasonal_weights(periods, hist_off)
         for year, annual in sales_targets.items():
-            annual_on = on_targets.get(year, annual)   # 缺渠道拆分时全部算线上
-            annual_off = off_targets.get(year, Decimal(0))
-            parts_on = monthlyize(annual_on, w_on[_shape_year(w_on, target_years, year)])
-            parts_off = monthlyize(annual_off, w_off[_shape_year(w_off, target_years, year)])
-            months = [j for j, pp in enumerate(periods) if int(pp[:4]) == year]
-            for j, (a, b) in enumerate(zip(parts_on, parts_off)):
-                qty_online[months[j]] = a
-                qty_offline[months[j]] = b
+            yr_str = f"{year}-"
+            months_idx = [j for j, pp in enumerate(periods) if int(pp[:4]) == year]
+            # 若该渠道已有逐月输入（来自预算页编辑），保留月度值；否则从年度目标季节化分布
+            has_on_monthly = any(inputs.get(QTY_ONLINE, {}).get(pp) is not None
+                                 for pp in periods if pp.startswith(yr_str) and not pp.endswith("-12"))
+            has_off_monthly = any(inputs.get(QTY_OFFLINE, {}).get(pp) is not None
+                                  for pp in periods if pp.startswith(yr_str) and not pp.endswith("-12"))
+            if not has_on_monthly:
+                annual_on = on_targets.get(year, annual)   # 缺渠道拆分时全部算线上
+                parts_on = monthlyize(annual_on, w_on[_shape_year(w_on, target_years, year)])
+                for j, a in zip(months_idx, parts_on):
+                    qty_online[j] = a
+            if not has_off_monthly:
+                annual_off = off_targets.get(year, Decimal(0))
+                parts_off = monthlyize(annual_off, w_off[_shape_year(w_off, target_years, year)])
+                for j, b in zip(months_idx, parts_off):
+                    qty_offline[j] = b
 
     # 情景销量系数：对最终月度销量整体缩放（含 2028 目标已月度化的结果）。
     # 必须在此处缩放而非改输入——否则给 2028 各月写 qty 会被 _row_year_targets
