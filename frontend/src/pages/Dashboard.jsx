@@ -13,7 +13,7 @@ const PURCHASE_GROUP = { name: '采购', rows: [
   { key: 'purchase.accessory', label: '配件采购付款' },
 ] }
 const COST_GROUPS = [...BUDGET_COST_GROUPS, PURCHASE_GROUP]
-const CAT_COLORS = ['#4f8cff', '#f6bd16', '#00b578', '#e86452']
+const CAT_COLORS = ['#4a72a8', '#a97f38', '#3f8f6e', '#b0685b']  // 降饱和加深，白字清晰
 // 桑基收入/成本节点键
 const SALE_NODES = [
   ['线上销售', 'sale.online.amount'], ['线下销售', 'sale.offline.amount'],
@@ -203,11 +203,12 @@ export default function Dashboard({ user, onLogout }) {
         type: 'treemap', roam: false, nodeClick: false, width: '100%', height: '100%',
         top: 4, bottom: 4, left: 4, right: 4,
         breadcrumb: { show: false },
-        label: { fontSize: 11, formatter: (i) => `${i.name}\n${fmt(i.value, 0)}` },
+        label: { fontSize: 11, color: '#fff', textBorderColor: 'rgba(0,0,0,0.4)', textBorderWidth: 2,
+          formatter: (i) => `${i.name}\n${fmt(i.value, 0)}` },
         upperLabel: { show: true, height: 18, fontSize: 11, color: '#fff' },
         levels: [
           { itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 } },
-          { itemStyle: { borderColor: '#fff', borderWidth: 1, gapWidth: 1 }, colorSaturation: [0.35, 0.55] },
+          { itemStyle: { borderColor: '#fff', borderWidth: 1, gapWidth: 1 }, colorSaturation: [0.2, 0.4] },
         ],
         data,
       }],
