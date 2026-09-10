@@ -97,10 +97,15 @@ export default function Budget() {
     return months.length === 1 ? effIn(row, months[0]) : r2(sum)
   }
   const setGroup = (row, months, v) => {
-    const each = months.length === 1 ? String(r2(Number(v || 0))) : String(r2(Number(v || 0) / months.length))
+    const total = Number(v || 0)
+    const n = months.length
+    // 均摊时余数归最后一月，保证求和=输入值（12 个月不整除也无小数漂移）
+    const per = n > 1 ? r2(total / n) : total
     setEdits((prev) => {
       const next = { ...prev, [row]: { ...(prev[row] || {}) } }
-      for (const p of months) next[row][p] = each
+      months.forEach((p, i) => {
+        next[row][p] = String(i === n - 1 ? r2(total - per * (n - 1)) : per)
+      })
       return next
     })
   }
