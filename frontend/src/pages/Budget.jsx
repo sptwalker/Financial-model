@@ -235,8 +235,8 @@ export default function Budget() {
                 {BUDGET_SALES_PARAMS.map((f) => (
                   <label className="param-item" key={f.key}>
                     <span className="param-label">{f.label}</span>
-                    <input type="number" step={f.step} value={salesParams[f.key] ?? ''}
-                      onChange={(e) => setSalesParams((p) => ({ ...p, [f.key]: e.target.value }))} />
+                    <NumInput value={salesParams[f.key] ?? ''}
+                      onCommit={(v) => setSalesParams((p) => ({ ...p, [f.key]: v }))} />
                   </label>
                 ))}
               </div>
@@ -270,6 +270,29 @@ function Metric({ label, value, unit, tone, live }) {
       <div className="stat-value">{value}</div>
       <div className="stat-sub">{unit}</div>
     </div>
+  )
+}
+
+// 只留数字与一个小数点（金额输入清洗；负号无意义故不允许）
+function cleanNum(s) {
+  s = String(s).replace(/[^\d.]/g, '')
+  const i = s.indexOf('.')
+  return i < 0 ? s : s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '')
+}
+
+// 金额输入框：编辑时回显所敲字符（本地 text），失焦同步回派生值；
+// type=text + inputMode=decimal —— 移动端弹数字键盘，且不会吞掉中间态 "1."
+function NumInput({ value, placeholder = '0', onCommit }) {
+  const norm = value === '' || value == null || Number(value) === 0 ? '' : String(value)
+  const [text, setText] = useState(norm)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => { if (!editing) setText(norm) }, [norm, editing])
+  return (
+    <input type="text" inputMode="decimal" placeholder={placeholder}
+      value={editing ? text : norm}
+      onFocus={() => setEditing(true)}
+      onBlur={() => setEditing(false)}
+      onChange={(e) => { const v = cleanNum(e.target.value); setText(v); onCommit(v) }} />
   )
 }
 
@@ -334,8 +357,8 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
         {years.map(({ y, months }) => (
           <div className="fin-year" key={y}>
             <span className="fin-year-label">{y}年</span>
-            <input type="number" step="1" placeholder="金额" value={Math.round(yearAmount(y, months)) || ''}
-              onChange={(e) => setFin(y, months, monthByYear[y] || '12', e.target.value)} />
+            <NumInput value={Math.round(yearAmount(y, months)) || ''} placeholder="金额"
+              onCommit={(v) => setFin(y, months, monthByYear[y] || '12', v)} />
             <select value={monthByYear[y] || '12'}
               onChange={(e) => {
                 setMonthByYear((m) => ({ ...m, [y]: e.target.value }))
@@ -399,8 +422,8 @@ function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits,
             {groups.map((g) => (
               <label className="edit-cell" key={g.label}>
                 <span>{g.label}</span>
-                <input type="number" step={r.key === FINANCING ? '1' : '0.01'} value={groupVal(r.key, g.months)}
-                  onChange={(e) => setGroup(r.key, g.months, e.target.value)} />
+                <NumInput value={groupVal(r.key, g.months)}
+                  onCommit={(v) => setGroup(r.key, g.months, v)} />
               </label>
             ))}
           </div>
