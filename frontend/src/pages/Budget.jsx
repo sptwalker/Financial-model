@@ -217,11 +217,15 @@ export default function Budget() {
       { label: '管理总预算', unit: '万元', tone: 'green', dp: 0, fn: (ps) => rowsIn(ps, ADMIN) },
       { label: '总融资额', unit: '万元', tone: 'gray', dp: 0, fn: (ps) => sumIn(ps, 'cash.financing') },
     ]
-    return defs.map((d) => ({
-      label: d.label, unit: d.unit, tone: d.tone,
-      total: fmt(d.fn(periods), d.dp),
-      years: years.map((y) => ({ y: y.slice(2), v: fmt(d.fn(periods.filter((p) => p.slice(0, 4) === y)), d.dp) })),
-    }))
+    return defs.map((d) => {
+      const yn = years.map((y) => ({ y: y.slice(2), n: d.fn(periods.filter((p) => p.slice(0, 4) === y)) }))
+      const max = Math.max(1e-9, ...yn.map((x) => Math.abs(x.n)))
+      return {
+        label: d.label, unit: d.unit, tone: d.tone,
+        total: fmt(d.fn(periods), d.dp),
+        years: yn.map((x) => ({ y: x.y, v: fmt(x.n, d.dp), pct: Math.round(Math.abs(x.n) / max * 100) })),
+      }
+    })
   }, [preview, baseGrid, periods])
 
   const save = async () => {
@@ -349,6 +353,7 @@ function Metric({ label, value, unit, tone, live, years }) {
           {years.map((yr) => (
             <div className="stat-year" key={yr.y}>
               <span className="sy-label">{yr.y}年</span>
+              <span className="sy-bar"><i className="sy-fill" style={{ width: `${yr.pct}%` }} /></span>
               <span className="sy-val">{yr.v}</span>
             </div>
           ))}

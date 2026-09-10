@@ -307,10 +307,16 @@ body {
   display: flex; flex-direction: column; gap: 2px;
 }
 .stat-year {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 11px; padding-left: 6px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 6px; font-size: 11px; padding-left: 6px;
 }
 .sy-label { color: var(--muted); }
+.sy-bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.sy-fill { display: block; height: 100%; border-radius: 3px; background: var(--gray); }
+.stat-blue .sy-fill { background: var(--blue); }
+.stat-green .sy-fill { background: var(--green); }
+.stat-orange .sy-fill { background: var(--orange); }
+.stat-purple .sy-fill { background: #9254de; }
 .sy-val { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
 
 /* 方案切换（乐观/中性/悲观） */
