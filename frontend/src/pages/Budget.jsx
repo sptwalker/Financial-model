@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc } from '../api'
-import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS } from '../rows'
+import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS, BUDGET_RATE_PARAMS, AUTO_MKT_KEYS } from '../rows'
 
 const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
+const AUTO_MKT = new Set(AUTO_MKT_KEYS)                     // 营销自动测算行（只读）
+const PARAM_FIELDS = [...BUDGET_SALES_PARAMS, ...BUDGET_RATE_PARAMS]
+const RATE_KEYS = new Set(BUDGET_RATE_PARAMS.map((f) => f.key))
 export const TRIAL_KEY = 'budget_trial'                    // 试算暂存：看板据此预览未保存的当前页数值
 const DRAFT_KEY = 'budget_draft'                           // 预算页编辑草稿：切页/试算往返不丢失输入
 
@@ -20,6 +23,7 @@ function defaultName(ver) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} v${ver}`
 }
 const QTY_KEYS = new Set(BUDGET_SALES_QTY.map((r) => r.key))
+const EMPTY_SET = new Set()
 const FINANCING = 'cash.financing'                         // 融资款：整数、一次性注入不摊分
 const CHART_PALETTE = ['#4f8cff', '#5ad8a6', '#f6bd16', '#9254de', '#ff9f7f', '#5b8ff9', '#e86452']
 
@@ -77,10 +81,11 @@ export default function Budget() {
       setVersionNo(vno)
       const sp = {}
       for (const f of BUDGET_SALES_PARAMS) if (params?.[f.key] != null) sp[f.key] = params[f.key]
+      for (const f of BUDGET_RATE_PARAMS) sp[f.key] = String(params?.[f.key] ?? f.def)
       setBaseParams(sp)
-      // 恢复草稿：切页/试算往返保留当前输入；无草稿则回落基线
+      // 恢复草稿：切页/试算往返保留当前输入；无草稿则回落基线（费率默认补齐旧草稿缺失键）
       const draft = loadDraft()
-      setSalesParams(draft?.salesParams ?? sp)
+      setSalesParams(draft?.salesParams ? { ...sp, ...draft.salesParams } : sp)
       setEdits(draft?.edits ?? {})
       setFactor(draft?.factor ?? 1)
       setSaveName(draft?.saveName ?? defaultName((vno ?? 0) + 1))
@@ -134,14 +139,23 @@ export default function Budget() {
 
   const paramsPayload = (fac = 1) => {
     const changed = {}
-    for (const f of BUDGET_SALES_PARAMS) {
-      if (String(salesParams[f.key] ?? '') !== String(baseParams[f.key] ?? ''))
+    for (const f of PARAM_FIELDS) {
+      if (salesParams[f.key] == null) continue
+      if (String(salesParams[f.key]) !== String(baseParams[f.key] ?? ''))
         changed[f.key] = salesParams[f.key]
     }
     // 情景销量系数走引擎 qty_scale（对最终销量整体缩放），不改 qty 输入行
     if (fac !== 1) changed.qty_scale = fac
     return Object.keys(changed).length ? changed : undefined
   }
+  // 送引擎的参数：始终开启营销自动测算（佣金/推广费=销售额×费率）
+  const enginePayload = (fac = 1) => ({ ...(paramsPayload(fac) || {}), auto_marketing: true })
+  // 自动测算行的展示值：优先实时预览，回落基线网格
+  const compIn = (row, p) =>
+    preview?.cells?.[row]?.[p]?.value ?? baseGrid?.cells?.[row]?.[p]?.value ?? '0'
+  // 费率以百分数录入（引擎存小数）：显示 ×100，提交 ÷100
+  const pctVal = (key) => { const x = salesParams[key]; return x === '' || x == null ? '' : r2(Number(x) * 100) }
+  const setRate = (key, v) => setSalesParams((s) => ({ ...s, [key]: v === '' ? '' : String(Number(v) / 100) }))
   // 输入覆盖：仅中性编辑增量；情景差异由 params.qty_scale 表达，不覆写 qty 行
   const inputsPayload = () => {
     const out = {}
@@ -156,16 +170,14 @@ export default function Budget() {
   }
 
   const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
-  const needPreview = dirty || factor !== 1
 
-  // 边改边预览 / 切换方案：防抖 400ms 调预览端点（不建版本）
+  // 营销自动测算下，展示值始终来自引擎预览（区别于基线存档）→ 恒预览；防抖 400ms（不建版本）
   useEffect(() => {
     if (!neutralId || !baseGrid) return
-    if (!needPreview) { setPreview(null); return }
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       try {
-        const p = await previewRecalc(neutralId, { params: paramsPayload(factor), inputs: inputsPayload() })
+        const p = await previewRecalc(neutralId, { params: enginePayload(factor), inputs: inputsPayload() })
         setPreview(p)
       } catch (e) {
         setMsg('预览失败：' + String(e.response?.data?.detail || e.message))
@@ -207,7 +219,7 @@ export default function Budget() {
         const sc = byName(s.name)
         if (!sc) continue
         const r = await recalc(sc.id, {
-          params: paramsPayload(s.factor), inputs: inputsPayload(), comment: `${name} · ${s.name}`,
+          params: enginePayload(s.factor), inputs: inputsPayload(), comment: `${name} · ${s.name}`,
         })
         if (s.factor === 1) last = r
       }
@@ -228,7 +240,7 @@ export default function Budget() {
     const scen = {}
     for (const s of SCENARIOS) {
       const sc = byName(s.name)
-      if (sc) scen[sc.id] = { params: paramsPayload(s.factor), inputs: inputsPayload() }
+      if (sc) scen[sc.id] = { params: enginePayload(s.factor), inputs: inputsPayload() }
     }
     localStorage.setItem(TRIAL_KEY, JSON.stringify({ scenarios: scen }))
     navigate('/')
@@ -289,7 +301,22 @@ export default function Budget() {
           <Section title="研发预算（万元）" tone="rd" rows={RD}
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
           <Section title="营销预算（万元）" tone="mkt" rows={MKT}
-            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
+            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits}
+            autoRows={AUTO_MKT} autoIn={compIn} autoRev={preview}
+            top={(
+              <div className="budget-rates">
+                {BUDGET_RATE_PARAMS.map((f) => (
+                  <label className="rate-item" key={f.key}>
+                    <span className="rate-label">{f.label}</span>
+                    <span className="rate-field">
+                      <NumInput value={pctVal(f.key)} onCommit={(v) => setRate(f.key, v)} />
+                      <em>%</em>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            note="渠道佣金/推广费＝线下销售额×费率，线上推广费＝线上销售额×分年费率，随销量与费率自动测算（灰底为只读结果）。" />
           <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
           <FinancingSection periods={periods} effIn={effIn} setEdits={setEdits} baseGrid={baseGrid} />
@@ -423,15 +450,23 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
   )
 }
 
-function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits, factor = 1, top, note }) {
+function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits, factor = 1, top, note,
+                  autoRows = EMPTY_SET, autoIn = null, autoRev = null }) {
   const [gran, setGran] = useState('year')
   const groups = useMemo(() => periodGroups(periods, gran), [periods, gran])
   const isQtySec = rows.some((r) => QTY_KEYS.has(r.key))
 
+  // 自动测算行读引擎值（只读），其余读编辑值
+  const cellVal = (key, p) => (autoRows.has(key) && autoIn ? autoIn(key, p) : effIn(key, p))
+  const gVal = (key, months) => {
+    const sum = months.reduce((a, p) => a + Number(cellVal(key, p) || 0), 0)
+    return months.length === 1 ? cellVal(key, months[0]) : r2(sum)
+  }
+
   const option = useMemo(() => {
     const scaled = (key, months) => {
       const f = QTY_KEYS.has(key) ? factor : 1
-      return r2(f * months.reduce((a, p) => a + Number(effIn(key, p) || 0), 0))
+      return r2(f * months.reduce((a, p) => a + Number(cellVal(key, p) || 0), 0))
     }
     const multi = rows.length > 1
     return {
@@ -446,9 +481,9 @@ function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits,
         data: groups.map((g) => scaled(r.key, g.months)),
       })),
     }
-    // 图形随编辑(edits)/粒度/方案实时刷新
+    // 图形随编辑(edits)/粒度/方案/预览(autoRev)实时刷新
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, groups, edits, factor])
+  }, [rows, groups, edits, factor, autoRev])
 
   return (
     <section className={`card budget-sec budget-sec--${tone}`}>
@@ -461,20 +496,28 @@ function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits,
         </div>
       </div>
       {top}
-      {rows.map((r) => (
-        <div className="budget-row" key={r.key}>
-          <div className="budget-row-label">{r.label}{r.unit ? `（${r.unit}）` : ''}</div>
-          <div className={`budget-strip${groups.length <= 6 ? ' budget-strip--wide' : ''}`}>
-            {groups.map((g) => (
-              <label className="edit-cell" key={g.label}>
-                <span>{g.label}</span>
-                <NumInput value={groupVal(r.key, g.months)}
-                  onCommit={(v) => setGroup(r.key, g.months, v)} />
-              </label>
-            ))}
+      {rows.map((r) => {
+        const auto = autoRows.has(r.key)
+        return (
+          <div className="budget-row" key={r.key}>
+            <div className="budget-row-label">
+              {r.label}{r.unit ? `（${r.unit}）` : ''}
+              {auto && <span className="auto-tag">自动</span>}
+            </div>
+            <div className={`budget-strip${groups.length <= 6 ? ' budget-strip--wide' : ''}`}>
+              {groups.map((g) => (
+                <label className="edit-cell" key={g.label}>
+                  <span>{g.label}</span>
+                  {auto
+                    ? <input className="auto-val" value={fmt(Number(gVal(r.key, g.months)), 2)} readOnly disabled tabIndex={-1} />
+                    : <NumInput value={gVal(r.key, g.months)}
+                        onCommit={(v) => setGroup(r.key, g.months, v)} />}
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
       <div className="budget-chart"><Chart option={option} height={isQtySec ? 150 : 160} /></div>
       {note && <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>{note}</p>}
     </section>

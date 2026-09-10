@@ -118,6 +118,17 @@ export const BUDGET_SALES_PARAMS = [
   { key: 'cost_accessory', label: '单台配件采购成本（元）', step: '1' },
 ]
 
+// 营销费率系数（预算页可调；引擎 auto_marketing 开启后按销售额×费率自动测算）
+export const BUDGET_RATE_PARAMS = [
+  { key: 'channel_commission_rate', label: '渠道佣金（占线下销售额）', def: 0.05 },
+  { key: 'channel_promo_rate', label: '渠道推广费（占线下）', def: 0.02 },
+  { key: 'online_promo_rate_2026', label: '26年线上推广（占线上）', def: 0.30 },
+  { key: 'online_promo_rate_2027', label: '27年线上推广（占线上）', def: 0.26 },
+  { key: 'online_promo_rate_2028', label: '28年线上推广（占线上）', def: 0.23 },
+]
+// 营销自动测算行（预算页只读展示，值随费率/销量实时算出）
+export const AUTO_MKT_KEYS = ['exp.channel_commission', 'exp.channel_promo', 'exp.online_promo']
+
 export function rowInfo(key) {
   for (const g of ROW_GROUPS) {
     const r = g.rows.find((x) => x.key === key)

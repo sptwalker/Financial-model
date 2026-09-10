@@ -39,6 +39,8 @@ def _coerce_params(data: dict) -> dict:
     for k, v in data.items():
         if isinstance(v, list):
             out[k] = [_coerce_decimal(x) for x in v]
+        elif isinstance(v, bool):
+            out[k] = v
         elif k == "purchase_lag":
             out[k] = int(v)
         else:

@@ -76,6 +76,9 @@ EXPENSE_ROWS = [
 ]
 EXPENSE_TOTAL = "exp.total"    # 费用合计 = 各行之和（引擎计算）
 
+# 营销自动测算涉及的行（auto_marketing 开启时按销售额×费率，忽略输入）
+AUTO_MKT_ROWS = frozenset({"exp.channel_commission", "exp.channel_promo", "exp.online_promo"})
+
 # 全部引擎计算行
 COMPUTED_ROWS = frozenset({
     QTY_TOTAL, SALE_ONLINE, SALE_OFFLINE, SALE_ACC, SALE_SUB, SALE_TOTAL,
@@ -112,6 +115,13 @@ class Params:
     offline_mkt_rate: Decimal = Decimal("0.23")
     # 渠道佣金费率（渠道佣金=线下销售×费率）
     channel_commission_rate: Decimal = Decimal("0.05")
+    # 营销费用自动测算（预算页开关）：开启后佣金/推广费按当期销售额×费率，忽略输入值
+    auto_marketing: bool = False
+    channel_promo_rate: Decimal = Decimal("0.02")          # 渠道推广费=线下销售额×费率
+    # 线上推广费=线上销售额×费率，分年（2026/2027/2028）
+    online_promo_rate_2026: Decimal = Decimal("0.30")
+    online_promo_rate_2027: Decimal = Decimal("0.26")
+    online_promo_rate_2028: Decimal = Decimal("0.23")
     # 回款权重（渠道 → [当月, 次月]；线下 N+1 即 [0,1]）
     collect_weight_online: list = field(default_factory=lambda: [Decimal("0.5"), Decimal("0.5")])
     collect_weight_offline: list = field(default_factory=lambda: [Decimal("0"), Decimal("1")])
@@ -313,15 +323,27 @@ def run(periods: list[str], params: Params,
 
     # ---------- 5. 费用（直接输入；目标年全年值 → 按月摊开） ----------
     exp_by_row = {row: [inp(row, i) for i in range(n)] for row in EXPENSE_ROWS}
-    # 渠道佣金默认 = 上月线下销售（含配件）×费率（Excel 口径：N+1；可覆盖）
-    for i in range(n):
-        if inputs.get("exp.channel_commission", {}).get(periods[i]) is None:
-            exp_by_row["exp.channel_commission"][i] = (
-                (sale_offline[i - 1] + acc_offline[i - 1]) * p.channel_commission_rate
-                if i >= 1 else zero
-            )
+    if p.auto_marketing:
+        # 营销自动测算：佣金/渠道推广=当期线下销售额×费率；线上推广=当期线上销售额×分年费率
+        online_rate = {2026: p.online_promo_rate_2026, 2027: p.online_promo_rate_2027,
+                       2028: p.online_promo_rate_2028}
+        for i in range(n):
+            yr = int(periods[i][:4])
+            exp_by_row["exp.channel_commission"][i] = sale_offline[i] * p.channel_commission_rate
+            exp_by_row["exp.channel_promo"][i] = sale_offline[i] * p.channel_promo_rate
+            exp_by_row["exp.online_promo"][i] = sale_online[i] * online_rate.get(yr, p.online_promo_rate_2028)
+    else:
+        # 渠道佣金默认 = 上月线下销售（含配件）×费率（Excel 口径：N+1；可覆盖）
+        for i in range(n):
+            if inputs.get("exp.channel_commission", {}).get(periods[i]) is None:
+                exp_by_row["exp.channel_commission"][i] = (
+                    (sale_offline[i - 1] + acc_offline[i - 1]) * p.channel_commission_rate
+                    if i >= 1 else zero
+                )
     # 费用年度目标（2028 全年值存于该年 12 月）：按季节曲线摊到全年
     for row in EXPENSE_ROWS:
+        if p.auto_marketing and row in AUTO_MKT_ROWS:
+            continue  # 自动测算行已逐月算出，不受年度目标覆盖
         annual_by_year = _row_year_targets(inputs, row, periods)
         if annual_by_year:
             hist = {pp: exp_by_row[row][j] for j, pp in enumerate(periods)}
