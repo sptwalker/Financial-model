@@ -132,16 +132,18 @@ export default function Budget() {
     })
   }
 
-  const paramsPayload = () => {
+  const paramsPayload = (fac = 1) => {
     const changed = {}
     for (const f of BUDGET_SALES_PARAMS) {
       if (String(salesParams[f.key] ?? '') !== String(baseParams[f.key] ?? ''))
         changed[f.key] = salesParams[f.key]
     }
+    // 情景销量系数走引擎 qty_scale（对最终销量整体缩放），不改 qty 输入行
+    if (fac !== 1) changed.qty_scale = fac
     return Object.keys(changed).length ? changed : undefined
   }
-  // 构造某方案的输入覆盖：中性用编辑增量；乐观/悲观再把销量整体乘系数
-  const inputsPayload = (fac) => {
+  // 输入覆盖：仅中性编辑增量；情景差异由 params.qty_scale 表达，不覆写 qty 行
+  const inputsPayload = () => {
     const out = {}
     for (const row of Object.keys(edits)) {
       out[row] = {}
@@ -150,13 +152,7 @@ export default function Budget() {
         out[row][p] = v === '' || v == null ? '0' : String(v)
       }
     }
-    if (fac !== 1) {
-      for (const q of QTY_KEYS) {
-        out[q] = {}
-        for (const p of periods) out[q][p] = String(r2(Number(effIn(q, p) || 0) * fac))
-      }
-    }
-    return out
+    return Object.keys(out).length ? out : undefined
   }
 
   const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
@@ -169,7 +165,7 @@ export default function Budget() {
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       try {
-        const p = await previewRecalc(neutralId, { params: paramsPayload(), inputs: inputsPayload(factor) })
+        const p = await previewRecalc(neutralId, { params: paramsPayload(factor), inputs: inputsPayload() })
         setPreview(p)
       } catch (e) {
         setMsg('预览失败：' + String(e.response?.data?.detail || e.message))
@@ -204,7 +200,6 @@ export default function Budget() {
     try {
       setBusy(true)
       setMsg('保存中…')
-      const params = paramsPayload()
       const name = saveName.trim() || defaultName((versionNo ?? 0) + 1)
       const byName = (n) => scenarios.find((s) => s.name === n)
       let last = null
@@ -212,7 +207,7 @@ export default function Budget() {
         const sc = byName(s.name)
         if (!sc) continue
         const r = await recalc(sc.id, {
-          params, inputs: inputsPayload(s.factor), comment: `${name} · ${s.name}`,
+          params: paramsPayload(s.factor), inputs: inputsPayload(), comment: `${name} · ${s.name}`,
         })
         if (s.factor === 1) last = r
       }
@@ -233,7 +228,7 @@ export default function Budget() {
     const scen = {}
     for (const s of SCENARIOS) {
       const sc = byName(s.name)
-      if (sc) scen[sc.id] = { params: paramsPayload(), inputs: inputsPayload(s.factor) }
+      if (sc) scen[sc.id] = { params: paramsPayload(s.factor), inputs: inputsPayload() }
     }
     localStorage.setItem(TRIAL_KEY, JSON.stringify({ scenarios: scen }))
     navigate('/')

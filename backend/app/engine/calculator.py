@@ -120,6 +120,8 @@ class Params:
     purchase_lag: int = 2
     # 2026-07 前累计装机量（万台，按现金流量表数值）
     install_base_initial: Decimal = Decimal("0")
+    # 情景销量系数（中性 1 / 乐观 1.2 / 悲观 0.8）：对最终销量整体缩放
+    qty_scale: Decimal = Decimal("1")
 
 
 def _d(x) -> Decimal:
@@ -248,9 +250,16 @@ def run(periods: list[str], params: Params,
                 qty_online[months[j]] = a
                 qty_offline[months[j]] = b
 
+    # 情景销量系数：对最终月度销量整体缩放（含 2028 目标已月度化的结果）。
+    # 必须在此处缩放而非改输入——否则给 2028 各月写 qty 会被 _row_year_targets
+    # 判为「已有月度输入」，年度目标失效导致线下归零。
+    p = params
+    if p.qty_scale != 1:
+        qty_online = [q * p.qty_scale for q in qty_online]
+        qty_offline = [q * p.qty_scale for q in qty_offline]
+
     # ---------- 2. 销售/收入 ----------
     # 单位：qty=万台，价格/单位收入=元/台 → 金额=万元（无需缩放）
-    p = params
     sale_online = [q * p.price_online for q in qty_online]
     sale_offline = [q * p.price_offline for q in qty_offline]
     qty_total = [a + b for a, b in zip(qty_online, qty_offline)]
