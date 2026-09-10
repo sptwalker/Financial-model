@@ -1,3 +1,24 @@
+# 部署运维
+
+## 日常更新（"推送+重建"）
+本地提交并推送到 `main` 后，在服务器拉取并重建镜像：
+```bash
+# 本地
+git push origin main
+# 服务器（一条命令；restart.sh = git pull && docker compose down && docker compose up -d --build）
+ssh root@139.159.246.25 "cd ~/walker/Financial-model && ./restart.sh"
+```
+- 服务器：`root@139.159.246.25`，项目目录 `~/walker/Financial-model`
+- 栈：docker compose 三服务 `api` / `postgres` / `web`（compose 项目名 `fm`，容器 `fm-*-1`）
+- postgres 数据卷持久，重建**不影响** `./data`
+- 验证：
+  ```bash
+  ssh root@139.159.246.25 "cd ~/walker/Financial-model && git rev-parse --short HEAD && docker compose ps"
+  ```
+  确认 HEAD = 刚推送的提交、三服务 healthy/Up。
+
+---
+
 # HTTPS 上线配置（留档；内测期间走 HTTP:80）
 
 ## 目录内容

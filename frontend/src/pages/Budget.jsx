@@ -8,6 +8,14 @@ const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位
 const AUTO_MKT = new Set(AUTO_MKT_KEYS)                     // 营销自动测算行（只读）
 const PARAM_FIELDS = [...BUDGET_SALES_PARAMS, ...BUDGET_RATE_PARAMS]
 const RATE_KEYS = new Set(BUDGET_RATE_PARAMS.map((f) => f.key))
+// 自动测算行 → 该年份费率键（渠道佣金/推广费各年同率；线上推广按年 2026/2027/2028）
+const rateKeyFor = (rowKey, year) => {
+  const k = rowKey === 'exp.channel_commission' ? 'channel_commission_rate'
+    : rowKey === 'exp.channel_promo' ? 'channel_promo_rate'
+      : rowKey === 'exp.online_promo' ? `online_promo_rate_${year}`
+        : null
+  return k && RATE_KEYS.has(k) ? k : null
+}
 export const TRIAL_KEY = 'budget_trial'                    // 试算暂存：看板据此预览未保存的当前页数值
 const DRAFT_KEY = 'budget_draft'                           // 预算页编辑草稿：切页/试算往返不丢失输入
 
@@ -303,20 +311,8 @@ export default function Budget() {
           <Section title="营销预算（万元）" tone="mkt" rows={MKT}
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits}
             autoRows={AUTO_MKT} autoIn={compIn} autoRev={preview}
-            top={(
-              <div className="budget-rates">
-                {BUDGET_RATE_PARAMS.map((f) => (
-                  <label className="rate-item" key={f.key}>
-                    <span className="rate-label">{f.label}</span>
-                    <span className="rate-field">
-                      <NumInput value={pctVal(f.key)} onCommit={(v) => setRate(f.key, v)} />
-                      <em>%</em>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-            note="渠道佣金/推广费＝线下销售额×费率，线上推广费＝线上销售额×分年费率，随销量与费率自动测算（灰底为只读结果）。" />
+            rateKeyFor={rateKeyFor} pctVal={pctVal} setRate={setRate}
+            note="渠道佣金/推广费＝线下销售额×费率，线上推广费＝线上销售额×分年费率；系数在各年金额下方微调（渠道费率各年一致），随销量与费率自动测算（灰底为只读结果）。" />
           <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
             periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
           <FinancingSection periods={periods} effIn={effIn} setEdits={setEdits} baseGrid={baseGrid} />
@@ -451,7 +447,8 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
 }
 
 function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits, factor = 1, top, note,
-                  autoRows = EMPTY_SET, autoIn = null, autoRev = null }) {
+                  autoRows = EMPTY_SET, autoIn = null, autoRev = null,
+                  rateKeyFor = null, pctVal = null, setRate = null }) {
   const [gran, setGran] = useState('year')
   const groups = useMemo(() => periodGroups(periods, gran), [periods, gran])
   const isQtySec = rows.some((r) => QTY_KEYS.has(r.key))
@@ -504,16 +501,26 @@ function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits,
               {r.label}{r.unit ? `（${r.unit}）` : ''}
               {auto && <span className="auto-tag">自动</span>}
             </div>
-            <div className={`budget-strip${groups.length <= 6 ? ' budget-strip--wide' : ''}`}>
-              {groups.map((g) => (
-                <label className="edit-cell" key={g.label}>
-                  <span>{g.label}</span>
-                  {auto
-                    ? <input className="auto-val" value={fmt(Number(gVal(r.key, g.months)), 2)} readOnly disabled tabIndex={-1} />
-                    : <NumInput value={gVal(r.key, g.months)}
-                        onCommit={(v) => setGroup(r.key, g.months, v)} />}
-                </label>
-              ))}
+            <div className={`budget-strip${groups.length <= 6 ? ' budget-strip--wide' : ''}${auto ? ' budget-strip--auto' : ''}`}>
+              {groups.map((g) => {
+                const rk = auto && gran === 'year' && rateKeyFor ? rateKeyFor(r.key, g.months[0].slice(0, 4)) : null
+                return (
+                  <label className="edit-cell" key={g.label}>
+                    <span>{g.label}</span>
+                    {auto
+                      ? <input className="auto-val" value={fmt(Number(gVal(r.key, g.months)), 2)} readOnly disabled tabIndex={-1} />
+                      : <NumInput value={gVal(r.key, g.months)}
+                          onCommit={(v) => setGroup(r.key, g.months, v)} />}
+                    {rk && (
+                      <span className="cell-rate">
+                        <input type="number" min="0" max="100" step="0.5"
+                          value={pctVal(rk)} onChange={(e) => setRate(rk, e.target.value)} />
+                        <em>%</em>
+                      </span>
+                    )}
+                  </label>
+                )
+              })}
             </div>
           </div>
         )
