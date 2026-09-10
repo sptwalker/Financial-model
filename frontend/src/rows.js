@@ -116,6 +116,8 @@ export const BUDGET_SALES_PARAMS = [
   { key: 'price_offline', label: '线下平均售价（元/台）', step: '0.01' },
   { key: 'cost_main', label: '整机采购成本（元/台）', step: '1' },
   { key: 'cost_accessory', label: '单台配件采购成本（元）', step: '1' },
+  { key: 'acc_revenue_per_unit', label: '单台配件收入（元）', step: '1' },
+  { key: 'sub_revenue_per_unit', label: '订阅单价（元/台/年）', step: '1' },
 ]
 
 // 营销费率系数（预算页可调；引擎 auto_marketing 开启后按销售额×费率自动测算）
