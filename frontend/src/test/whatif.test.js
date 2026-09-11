@@ -5,7 +5,7 @@
  * 的判断核心，算错会让"提价 10%"变成绝对价、或缺口显示成 0，故单测锁死。
  */
 import { describe, expect, it } from 'vitest'
-import { buildOverride, impactOf } from '../whatif'
+import { buildOverride, buildExpenseInputs, impactOf } from '../whatif'
 
 describe('buildOverride', () => {
   it('系数=1 时价格/销量维持基线（仅格式化）', () => {
@@ -29,6 +29,45 @@ describe('buildOverride', () => {
     const o = buildOverride(null, { priceFactor: 1, qtyFactor: 1, collectNow: 0.5 })
     expect(o.price_online).toBe('1799.00')
     expect(o.price_offline).toBe('1475.18')
+  })
+
+  it('采购成本系数缩放采购价；缺省视为不变', () => {
+    // 只给采购旋钮，收入侧缺省 → 价格/销量维持基线
+    const o = buildOverride(
+      { cost_main: '1150', cost_accessory: '60' },
+      { costMain: 1.1, costAcc: 0.8 })
+    expect(o.cost_main).toBe('1265.00')       // 1150 × 1.1
+    expect(o.cost_accessory).toBe('48.00')    // 60 × 0.8
+    expect(o.price_online).toBe('1799.00')    // 缺省价格系数=1
+    expect(o.qty_scale).toBe('1.0000')
+  })
+
+  it('采购无基线参数时用引擎默认兜底（1150/60）', () => {
+    const o = buildOverride(null, { costMain: 1, costAcc: 1 })
+    expect(o.cost_main).toBe('1150.00')
+    expect(o.cost_accessory).toBe('60.00')
+  })
+})
+
+describe('buildExpenseInputs', () => {
+  const grid = {
+    cells: {
+      'exp.salary': { '2026-08': { value: '100' }, '2026-09': { value: '120' } },
+      'exp.rent': { '2026-08': { value: '30' } },
+      'exp.total': { '2026-08': { value: '130' } },   // 合计行不缩放
+      'sale.online.amount': { '2026-08': { value: '999' } },  // 非费用行忽略
+    },
+  }
+  it('缩放所有 exp.* 明细行，跳过合计与非费用行', () => {
+    const o = buildExpenseInputs(grid, 1.1)
+    expect(o['exp.salary']).toEqual({ '2026-08': '110.0000', '2026-09': '132.0000' })
+    expect(o['exp.rent']).toEqual({ '2026-08': '33.0000' })
+    expect(o['exp.total']).toBeUndefined()
+    expect(o['sale.online.amount']).toBeUndefined()
+  })
+  it('系数=1 或空网格返回 null（不必要则不覆盖）', () => {
+    expect(buildExpenseInputs(grid, 1)).toBeNull()
+    expect(buildExpenseInputs(null, 1.2)).toBeNull()
   })
 })
 

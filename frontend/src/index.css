@@ -134,9 +134,11 @@ body {
 .cmp-select { max-width: 40vw; }
 
 /* ---------- what-if 推演滑杆 ---------- */
-.wif-slider { margin: 12px 0; }
-.wif-slider-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-.wif-slider-head b { color: var(--blue); }
+.wif-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+.wif-slider { margin: 0; min-width: 0; }
+.wif-slider-head { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; margin-bottom: 2px; }
+.wif-slider-head span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wif-slider-head b { color: var(--blue); flex: 0 0 auto; }
 .wif-slider input[type="range"] { width: 100%; }
 
 /* ---------- 现金流预警 ---------- */

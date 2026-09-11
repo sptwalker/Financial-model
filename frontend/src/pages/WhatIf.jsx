@@ -1,17 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
 import { fmt, getVersions, gridPeriods, listScenarios, previewRecalc } from '../api'
-import { buildOverride, impactOf } from '../whatif'
+import { buildOverride, buildExpenseInputs, impactOf } from '../whatif'
 
 // what-if 推演页（阶段5 · P2-6）：三个滑杆（单价系数 / 销量系数 / 当月回款占比）实时
 // 叠加到情景快照参数上做非持久化预览，与基线并排看期末现金/资金缺口的敏感性。
 
+const PCT = (v) => `${Math.round(v * 100)}%`
+// 收入/回款侧 + 成本侧，各三项，页面排成两行三列
 const SLIDERS = [
-  { key: 'priceFactor', label: '单价', min: 0.8, max: 1.2, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%` },
-  { key: 'qtyFactor', label: '销量', min: 0.8, max: 1.2, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%` },
-  { key: 'collectNow', label: '当月回款占比', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'priceFactor', label: '单价', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
+  { key: 'qtyFactor', label: '销量', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
+  { key: 'collectNow', label: '当月回款', min: 0, max: 1, step: 0.05, fmt: PCT },
+  { key: 'costMain', label: '主机采购', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
+  { key: 'costAcc', label: '配件采购', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
+  { key: 'expFactor', label: '运营费用', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
 ]
-const DEFAULTS = { priceFactor: 1, qtyFactor: 1, collectNow: 0.5 }
+const DEFAULTS = { priceFactor: 1, qtyFactor: 1, collectNow: 0.5, costMain: 1, costAcc: 1, expFactor: 1 }
 
 export default function WhatIf() {
   const [scenarios, setScenarios] = useState([])
@@ -56,15 +61,17 @@ export default function WhatIf() {
   // 滑杆变动：去抖 300ms 后预览推演网格
   useEffect(() => {
     if (!scenarioId || !baseParams) return
-    const noChange = knobs.priceFactor === 1 && knobs.qtyFactor === 1 &&
-      knobs.collectNow === Number(baseParams.collect_weight_online?.[0] ?? 0.5)
+    const baseCollect = Number(baseParams.collect_weight_online?.[0] ?? 0.5)
+    const noChange = SLIDERS.every((s) =>
+      s.key === 'collectNow' ? knobs.collectNow === baseCollect : knobs[s.key] === 1)
     if (noChange) { setWif(null); return }
     const mySeq = ++seq.current
     setBusy(true)
     const t = setTimeout(async () => {
       try {
         const override = buildOverride(baseParams, knobs)
-        const g = await previewRecalc(scenarioId, { params: override })
+        const inputs = buildExpenseInputs(base, knobs.expFactor)
+        const g = await previewRecalc(scenarioId, inputs ? { params: override, inputs } : { params: override })
         if (mySeq === seq.current) setWif(g)
       } catch (e) {
         if (mySeq === seq.current) setError(String(e.response?.data?.detail || e.message))
@@ -73,7 +80,7 @@ export default function WhatIf() {
       }
     }, 300)
     return () => clearTimeout(t)
-  }, [knobs, scenarioId, baseParams])
+  }, [knobs, scenarioId, baseParams, base])
 
   const periods = useMemo(() => gridPeriods(base), [base])
   const baseImpact = useMemo(() => impactOf(base, periods), [base, periods])
@@ -123,7 +130,7 @@ export default function WhatIf() {
 
       {error && <div className="error-banner">{error}</div>}
       <p className="hint" style={{ padding: '0 14px' }}>
-        滑杆实时预览（不写库）。单价/销量为相对基线的系数，回款为线上当月回款占比。
+        滑杆实时预览（不写库）。单价/销量/成本为相对基线的系数（100%=不变），回款为线上当月回款占比。
       </p>
 
       <section className="card">
@@ -131,16 +138,18 @@ export default function WhatIf() {
           <h2>假设条件</h2>
           <button className="link-btn" onClick={() => setKnobs(DEFAULTS)}>重置</button>
         </div>
-        {SLIDERS.map((s) => (
-          <div key={s.key} className="wif-slider">
-            <div className="wif-slider-head">
-              <span>{s.label}</span>
-              <b>{s.fmt(knobs[s.key])}</b>
+        <div className="wif-grid">
+          {SLIDERS.map((s) => (
+            <div key={s.key} className="wif-slider">
+              <div className="wif-slider-head">
+                <span>{s.label}</span>
+                <b>{s.fmt(knobs[s.key])}</b>
+              </div>
+              <input type="range" min={s.min} max={s.max} step={s.step} value={knobs[s.key]}
+                onChange={(e) => setKnobs((k) => ({ ...k, [s.key]: Number(e.target.value) }))} />
             </div>
-            <input type="range" min={s.min} max={s.max} step={s.step} value={knobs[s.key]}
-              onChange={(e) => setKnobs((k) => ({ ...k, [s.key]: Number(e.target.value) }))} />
-          </div>
-        ))}
+          ))}
+        </div>
         {busy && <p className="hint">测算中…</p>}
       </section>
 
