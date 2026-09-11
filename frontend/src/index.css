@@ -140,6 +140,7 @@ body {
 .wif-slider-head span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wif-slider-head b { color: var(--blue); flex: 0 0 auto; }
 .wif-slider input[type="range"] { width: 100%; }
+.wif-status { min-height: 1.5em; margin: 8px 0 0; white-space: pre; }
 
 /* ---------- 现金流预警 ---------- */
 .alert-card.has-alert { border-left: 4px solid var(--red); }

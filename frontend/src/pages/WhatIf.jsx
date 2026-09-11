@@ -12,11 +12,11 @@ const SLIDERS = [
   { key: 'priceFactor', label: '单价', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
   { key: 'qtyFactor', label: '销量', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
   { key: 'collectNow', label: '当月回款', min: 0, max: 1, step: 0.05, fmt: PCT },
-  { key: 'costMain', label: '主机采购', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
-  { key: 'costAcc', label: '配件采购', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
+  { key: 'costBuy', label: '采购成本', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
   { key: 'expFactor', label: '运营费用', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
+  { key: 'rdFactor', label: '研发成本', min: 0.8, max: 1.2, step: 0.01, fmt: PCT },
 ]
-const DEFAULTS = { priceFactor: 1, qtyFactor: 1, collectNow: 0.5, costMain: 1, costAcc: 1, expFactor: 1 }
+const DEFAULTS = { priceFactor: 1, qtyFactor: 1, collectNow: 0.5, costBuy: 1, expFactor: 1, rdFactor: 1 }
 
 export default function WhatIf() {
   const [scenarios, setScenarios] = useState([])
@@ -70,7 +70,7 @@ export default function WhatIf() {
     const t = setTimeout(async () => {
       try {
         const override = buildOverride(baseParams, knobs)
-        const inputs = buildExpenseInputs(base, knobs.expFactor)
+        const inputs = buildExpenseInputs(base, { opexFactor: knobs.expFactor, rdFactor: knobs.rdFactor })
         const g = await previewRecalc(scenarioId, inputs ? { params: override, inputs } : { params: override })
         if (mySeq === seq.current) setWif(g)
       } catch (e) {
@@ -150,7 +150,8 @@ export default function WhatIf() {
             </div>
           ))}
         </div>
-        {busy && <p className="hint">测算中…</p>}
+        {/* 常驻占位，避免 busy 切换时高度跳变导致页面闪动 */}
+        <p className="hint wif-status">{busy ? '测算中…' : ' '}</p>
       </section>
 
       <section className="card">
