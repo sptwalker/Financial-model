@@ -118,6 +118,20 @@ body {
 .wif-slider-head b { color: var(--blue); }
 .wif-slider input[type="range"] { width: 100%; }
 
+/* ---------- 现金流预警 ---------- */
+.alert-card.has-alert { border-left: 4px solid var(--red); }
+.alert-card.ok { border-left: 4px solid var(--green); }
+.alert-thresh { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.alert-thresh input { width: 72px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.alert-line { margin: 6px 0; font-size: 13px; }
+.alert-line.gap { color: var(--red); }
+.alert-line.lowcash { color: var(--orange); }
+.alert-line b { font-size: 15px; }
+.alert-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.alert-chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.alert-chip.gap { background: #fde8e8; color: var(--red); }
+.alert-chip.lowcash { background: #fff3e0; color: var(--orange); }
+
 /* ---------- 卡片 ---------- */
 .card {
   background: var(--card);

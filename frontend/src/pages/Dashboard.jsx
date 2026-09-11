@@ -4,9 +4,11 @@ import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc,
   releaseVersion, unreleaseVersion } from '../api'
 import { ROW_GROUPS, BUDGET_COST_GROUPS, rowInfo, CASH_COLORS } from '../rows'
 import { cellDelta } from '../diff'
+import { detectAlerts, summarizeAlerts } from '../alerts'
 import { TRIAL_KEY } from './Budget'
 
 const r2 = (n) => Math.round(n * 100) / 100
+const MIN_CASH_KEY = 'fm_min_cash'   // 最低现金安全水位阈值（万元），本地持久化
 
 // 成本构成四大类（研发/营销/运营管理来自预算页分组，追加采购付款）
 const PURCHASE_GROUP = { name: '采购', rows: [
@@ -57,6 +59,10 @@ export default function Dashboard({ user, onLogout }) {
   const [year, setYear] = useState(null)       // 成本构成/桑基图当前年份（null=默认首年）
   const [trial, setTrial] = useState(false)   // 当前网格是否为预算页「试算」预览（未保存）
   const [nonce, setNonce] = useState(0)        // 清除试算后强制重载
+  const [minCash, setMinCash] = useState(() => {
+    const v = Number(localStorage.getItem(MIN_CASH_KEY))
+    return Number.isFinite(v) ? v : 0
+  })
   const fetchSeq = useRef(0)
 
   useEffect(() => {
@@ -139,6 +145,16 @@ export default function Dashboard({ user, onLogout }) {
     const cur = statsOf(grid)
     return cmpGrid ? { ...cur, cmp: statsOf(cmpGrid) } : cur
   }, [grid, cmpGrid, periods])
+
+  // 现金流预警：资金缺口月 + 现金水位低于阈值月
+  const alerts = useMemo(() => detectAlerts(grid, periods, minCash), [grid, periods, minCash])
+  const alertSum = useMemo(() => summarizeAlerts(alerts), [alerts])
+  const setThreshold = (v) => {
+    const n = Number(v)
+    const safe = Number.isFinite(n) ? n : 0
+    setMinCash(safe)
+    localStorage.setItem(MIN_CASH_KEY, String(safe))
+  }
 
   const salesOption = useMemo(() => {
     if (!grid) return {}
@@ -363,6 +379,44 @@ export default function Dashboard({ user, onLogout }) {
             <Stat label="累计采购" value={fmt(stats.purchase, 0)} sub="万元" tone="red" delta={stats.cmp && stats.purchase - stats.cmp.purchase} />
             <Stat label="期初现金" value={fmt(stats.cashOpen, 0)} sub="万元" tone="gray" delta={stats.cmp && stats.cashOpen - stats.cmp.cashOpen} />
             <Stat label="期末现金" value={fmt(stats.cashClose, 0)} sub="万元" tone="gray" delta={stats.cmp && stats.cashClose - stats.cmp.cashClose} />
+          </section>
+
+          <section className={`card alert-card ${alertSum.total ? 'has-alert' : 'ok'}`}>
+            <div className="budget-sec-head">
+              <h2>{alertSum.total ? '⚠️ 现金流预警' : '✅ 现金流健康'}</h2>
+              <label className="alert-thresh" title="期末现金低于此水位即预警">
+                最低现金水位
+                <input type="number" step="10" value={minCash}
+                  onChange={(e) => setThreshold(e.target.value)} />
+                <span>万元</span>
+              </label>
+            </div>
+            {alertSum.total ? (
+              <>
+                {alertSum.gap && (
+                  <p className="alert-line gap">
+                    资金缺口 <b>{alertSum.gap.count}</b> 个月，最早 {alertSum.gap.first.slice(2)}，
+                    最深 {fmt(alertSum.gap.worst.value, 0)} 万（{alertSum.gap.worst.period.slice(2)}）
+                  </p>
+                )}
+                {alertSum.lowcash && (
+                  <p className="alert-line lowcash">
+                    现金低于 {fmt(minCash, 0)} 万 <b>{alertSum.lowcash.count}</b> 个月，最早 {alertSum.lowcash.first.slice(2)}，
+                    最低 {fmt(alertSum.lowcash.worst.value, 0)} 万（{alertSum.lowcash.worst.period.slice(2)}）
+                  </p>
+                )}
+                <div className="alert-chips">
+                  {alerts.map((a, i) => (
+                    <span key={i} className={`alert-chip ${a.type}`}
+                      title={a.type === 'gap' ? '资金缺口' : '现金低于水位'}>
+                      {a.period.slice(2)} {a.type === 'gap' ? '缺口' : '低现金'} {fmt(a.value, 0)}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="hint">全期无资金缺口，期末现金均不低于 {fmt(minCash, 0)} 万元安全水位。</p>
+            )}
           </section>
 
           <section className="card">
