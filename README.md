@@ -2,8 +2,8 @@
 
 将现有 Excel 现金流测算模型（`docs/现金流测算 2026.8.xls`）升级为一套**部署在公司网站、飞书登录、手机适配、面向高管**的动态现金流测算与预测系统：收入/成本数据在线动态可调，输入历史与预测数据即自动计算，并以 ECharts 动画图表直观呈现。
 
-> 当前状态：**MVP 已交付并上线联调通过**。后端 66 项测试全绿（覆盖率 83%）、Excel 全口径对账 `BUG=0`、前端生产构建通过。
-> 部署地址：`http://139.159.246.25`（详见 [deploy/README.md](deploy/README.md)）
+> 当前状态：**MVP 已交付并上线**。后端 66 项测试全绿（覆盖率 83%）、Excel 全口径对账 `BUG=0`、前端生产构建通过。
+> 线上地址：**https://fm.youdoogo.com**（详见 [deploy/README.md](deploy/README.md)）
 
 ## 技术栈（实际实现）
 
@@ -76,7 +76,8 @@ Financial-model/
 ├─ deploy/              nginx-http.conf · nginx-https.conf.example · gen-cert.ps1
 ├─ docs/                设计方案书 · 开发计划 · 财务待确认问题 · 验收报告 · 原始 Excel
 ├─ Dockerfile           三阶段构建：api(python:3.12-slim) → fe-build(node:24) → web(nginx)
-└─ docker-compose.yml   postgres + api + web
+├─ docker-compose.yml   postgres + api + web（配置全部走根 .env，见 .env.example）
+└─ restart.sh           服务器一键发布（git pull && compose down && up -d --build）
 ```
 
 ## 核心模型口径（财务已确认）
@@ -102,6 +103,26 @@ Financial-model/
 | 查看 viewer | 只读看板与报表 |
 
 所有写操作经 `OperationLog` 审计。**登录仅走飞书 OAuth，用户表没有密码字段，无密码登录入口。**
+
+## 生产部署
+
+线上地址 **https://fm.youdoogo.com**。发布一条命令：
+
+```bash
+ssh root@139.159.246.25 "cd ~/walker/Financial-model && ./restart.sh"   # git pull && compose down && up -d --build
+```
+
+全部环境相关取值集中在**仓库根 `.env`**（模板 [.env.example](.env.example)），仓库内没有需要手工修改的部署配置：
+
+| 变量 | 说明 |
+|---|---|
+| `POSTGRES_PASSWORD` / `SECRET_KEY` | 必填；生产仍为 dev 默认 `SECRET_KEY` 时后端拒绝启动 |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书自建应用凭据 |
+| `FEISHU_REDIRECT_URI` / `FRONTEND_URL` | 对外域名，须与飞书开放平台重定向 URL 一致 |
+| `WEB_PORT` | 宿主机对外端口（默认 `8021`，容器内恒为 80） |
+| `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | 构建期 pip 源，默认华为云镜像；官方源见 [deploy/README.md](deploy/README.md) |
+
+完整运维、HTTPS 与域名清单见 [deploy/README.md](deploy/README.md)。
 
 ## 与设计方案的偏差（已落地决策）
 

@@ -1,6 +1,8 @@
-# 内测部署（阶段4）— postgres + api + nginx，HTTP:80 局域网访问
+# 生产部署 — postgres + api + nginx
 # 仓库根 .env 提供：POSTGRES_PASSWORD / SECRET_KEY / FEISHU_APP_ID / FEISHU_APP_SECRET
+#                    以及可选的 WEB_PORT / FRONTEND_URL / FEISHU_REDIRECT_URI
 # 用法：docker compose up -d --build；停止：docker compose down（数据保留在 pgdata 卷）
+# 一键发布：./restart.sh
 name: fm
 
 services:
@@ -23,6 +25,10 @@ services:
     build:
       context: .
       target: api
+      args:
+        # 国内构建走华为云 pypi 镜像；改官方源见 Dockerfile 顶部说明
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://repo.huaweicloud.com/repository/pypi/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-repo.huaweicloud.com}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -34,8 +40,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:?请在仓库根 .env 设置 SECRET_KEY}
       FEISHU_APP_ID: ${FEISHU_APP_ID:-}
       FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
-      FEISHU_REDIRECT_URI: ${FEISHU_REDIRECT_URI:-http://172.28.252.38/api/v1/auth/feishu/callback}
-      FRONTEND_URL: ${FRONTEND_URL:-http://172.28.252.38}
+      # 默认值仅作占位：生产务必在根 .env 显式设置真正的对外域名
+      FEISHU_REDIRECT_URI: ${FEISHU_REDIRECT_URI:-http://localhost:8021/api/v1/auth/feishu/callback}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8021}
       # 初始角色名单（JSON 数组，飞书 open_id）；刘丹默认管理员填入 INITIAL_ADMIN_FEISHU_IDS
       INITIAL_ADMIN_FEISHU_IDS: ${INITIAL_ADMIN_FEISHU_IDS:-[]}
       INITIAL_EDITOR_FEISHU_IDS: ${INITIAL_EDITOR_FEISHU_IDS:-[]}
@@ -57,7 +64,8 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "80:80"
+      # 宿主机端口可配（默认 8021，见根 .env 的 WEB_PORT）
+      - "${WEB_PORT:-8021}:80"
 
 volumes:
   pgdata:

@@ -7,9 +7,17 @@
 # ---------- api ----------
 FROM python:3.12-slim AS api
 
+# 构建期 pip 源：国内服务器直连 pypi.org 极慢甚至超时，默认走华为云镜像。
+# 境外构建或需要官方源时：docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_INDEX_URL="https://repo.huaweicloud.com/repository/pypi/simple"
+ARG PIP_TRUSTED_HOST="repo.huaweicloud.com"
+
 WORKDIR /app
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip config set global.index-url "${PIP_INDEX_URL}" \
+ && if [ -n "${PIP_TRUSTED_HOST}" ]; then pip config set global.trusted-host "${PIP_TRUSTED_HOST}"; fi \
+ && pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/
 
 EXPOSE 8000
