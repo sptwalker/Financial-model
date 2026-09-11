@@ -112,6 +112,12 @@ body {
 .cell-delta.down { color: var(--green); }
 .cmp-select { max-width: 40vw; }
 
+/* ---------- what-if 推演滑杆 ---------- */
+.wif-slider { margin: 12px 0; }
+.wif-slider-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.wif-slider-head b { color: var(--blue); }
+.wif-slider input[type="range"] { width: 100%; }
+
 /* ---------- 卡片 ---------- */
 .card {
   background: var(--card);

@@ -28,6 +28,7 @@ vi.mock('../pages/Dashboard', () => ({
 }))
 vi.mock('../pages/Budget', () => ({ default: () => <div>预算内容</div> }))
 vi.mock('../pages/Compare', () => ({ default: () => <div>对比内容</div> }))
+vi.mock('../pages/WhatIf', () => ({ default: () => <div>推演内容</div> }))
 vi.mock('../pages/Params', () => ({ default: () => <div>设置内容</div> }))
 vi.mock('../pages/Admin', () => ({ default: () => <div>管理内容</div> }))
 
@@ -77,11 +78,11 @@ describe('底部导航与角色', () => {
     expect(screen.queryByRole('link', { name: '管理' })).not.toBeInTheDocument()
   })
 
-  it('三类用户都能看到预算/看板/对比/设置四个基础 tab', async () => {
+  it('三类用户都能看到预算/看板/对比/推演/设置五个基础 tab', async () => {
     setUser({ id: 2, name: '只读', role: 'viewer' })
     render(<App />)
     await screen.findByText('看板内容')
-    for (const name of ['预算', '看板', '对比', '设置']) {
+    for (const name of ['预算', '看板', '对比', '推演', '设置']) {
       expect(screen.getByRole('link', { name })).toBeInTheDocument()
     }
   })
