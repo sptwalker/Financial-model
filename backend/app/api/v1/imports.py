@@ -34,11 +34,15 @@ def rebuild(file_main_xls: UploadFile = File(...),
     """上传现金流测算.xls + 财务报表__202607期.xlsx → 重建基础数据（admin/editor）"""
     PermissionChecker.require_edit(current_user, action="导入重建", entity="基础数据")
 
-    if not file_main_xls.filename.lower().endswith(_XLS_EXTS):
+    main_name = file_main_xls.filename or ""
+    report_name = file_report_xlsx.filename or ""
+    if not main_name.lower().endswith(_XLS_EXTS):
         raise HTTPException(status_code=400, detail="主表应为 .xls 文件（现金流测算 2026.8.xls）")
-    if not file_report_xlsx.filename.lower().endswith(_XLSX_EXTS):
-        raise HTTPException(status_code=400, detail=f"{file_report_xlsx.filename} 应为 .xlsx 文件")
+    if not report_name.lower().endswith(_XLSX_EXTS):
+        raise HTTPException(status_code=400, detail=f"{report_name or '财务报表'} 应为 .xlsx 文件")
 
+    # 事务边界：rebuild_from_excel 内部只 flush，全部写入在成功末尾单次 commit，
+    # 任一步异常即整体回滚，不会留下「中性已清空但克隆未重建」的半重建态。
     # xlrd 只接受真实文件路径 → 主表写临时文件；xlsx 直接交给 openpyxl 读流
     try:
         with tempfile.NamedTemporaryFile(suffix=".xls", delete=False) as tmp:
@@ -58,6 +62,6 @@ def rebuild(file_main_xls: UploadFile = File(...),
         raise HTTPException(status_code=400, detail=f"导入失败：{e}")
 
     OperationLogService.log(db, action="scenario.import",
-                            description=f"导入重建基础数据（{file_main_xls.filename}）",
+                            description=f"导入重建基础数据（{main_name}）",
                             detail=result, user_id=current_user.id)
     return {"ok": True, **result}

@@ -205,8 +205,6 @@ def parse_params(book: xlrd.book.Book, sheet_name: str):
         acc_revenue_per_unit=_d(kv.get("单台配件收入", 200)),
         sub_ratio=_d(kv.get("订阅比例", 0.7)),
         sub_revenue_per_unit=_d(kv.get("单台订阅收益", 200)),
-        online_mkt_rate=_d(kv.get("线上营销费率", 0.30)),
-        offline_mkt_rate=_d(kv.get("线下综合费率", 0.23)),
     )
 
 

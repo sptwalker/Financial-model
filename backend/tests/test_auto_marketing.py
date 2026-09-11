@@ -34,4 +34,6 @@ def test_off_is_passthrough():
 
 
 if __name__ == "__main__":
-    test_auto_marketing_formulas(); test_off_is_passthrough(); print("OK")
+    test_auto_marketing_formulas()
+    test_off_is_passthrough()
+    print("OK")

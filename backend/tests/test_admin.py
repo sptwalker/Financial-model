@@ -155,7 +155,6 @@ def test_logs_pagination_admin_only(client, db):
 def test_sync_initial_roles_promotes_existing(client, db, monkeypatch):
     """启动补升：预置名单内的旧 viewer/pending → admin + active"""
     from app.services.user_service import UserService
-    from app.core import config as cfg
 
     u = _make_user(db, "test_liudan_openid", "刘丹",
                    role=UserRole.VIEWER, status=UserStatus.PENDING)

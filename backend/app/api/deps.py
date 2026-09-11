@@ -25,7 +25,13 @@ def get_current_user(
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌载荷无效")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    # JWT 的 sub 是字符串，显式转 int 以匹配整型主键（不同驱动下隐式转换行为不一致）
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌载荷无效")
+
+    user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
     if user.status != UserStatus.ACTIVE:

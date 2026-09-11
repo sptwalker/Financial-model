@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { getVersions, listScenarios, recalc, importRebuild } from '../api'
 import { PARAM_FIELDS } from '../rows'
 
-export default function Params({ user, onRecalc, onImport }) {
+export default function Params({ user, onImport }) {
   const [scenarioId, setScenarioId] = useState(null)
   const [scenarios, setScenarios] = useState([])
   const [params, setParams] = useState(null)
@@ -59,7 +59,6 @@ export default function Params({ user, onRecalc, onImport }) {
       const r = await recalc(scenarioId, { comment: '参数页调整后重算', params })
       setMsg(`已生成 v${r.version_no}（共 ${r.cell_count} 个单元格）`)
       await loadVersions(scenarioId) // 刷新版本列表与最新版本号
-      if (onRecalc) onRecalc()
     } catch (e) {
       setMsg('重算失败：' + String(e.response?.data?.detail || e.message))
     } finally {

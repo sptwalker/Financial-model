@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc,
   releaseVersion, unreleaseVersion } from '../api'
@@ -183,9 +183,10 @@ export default function Dashboard({ user, onLogout }) {
   // 成本构成/桑基图：年份列表与当前年
   const years = useMemo(() => [...new Set(periods.map((p) => p.slice(0, 4)))], [periods])
   const activeYear = year || years[0]
-  // 某行在指定年的合计
-  const ysum = (key, y) => periods.reduce(
-    (a, p) => (p.slice(0, 4) === y ? a + Number(grid.cells[key]?.[p]?.value ?? 0) : a), 0)
+  // 某行在指定年的合计（useCallback：作为下方 treemap/sankey 的 useMemo 依赖，避免每次都失效）
+  const ysum = useCallback((key, y) => periods.reduce(
+    (a, p) => (p.slice(0, 4) === y ? a + Number(grid?.cells[key]?.[p]?.value ?? 0) : a), 0),
+    [grid, periods])
 
   // 矩形树状图：四大类 → 明细行，按当前年合计
   const treemapOption = useMemo(() => {
@@ -213,7 +214,7 @@ export default function Dashboard({ user, onLogout }) {
         data,
       }],
     }
-  }, [grid, activeYear, periods])
+  }, [grid, activeYear, ysum])
 
   // 桑基图（权责制）：四类销售额 → 总收入 → 研发/营销/运营管理/采购 + 经营结余
   const sankeyOption = useMemo(() => {
@@ -242,7 +243,7 @@ export default function Dashboard({ user, onLogout }) {
         data: nodes, links,
       }],
     }
-  }, [grid, activeYear, periods])
+  }, [grid, activeYear, ysum])
 
   async function toggleRelease(on) {
     try {

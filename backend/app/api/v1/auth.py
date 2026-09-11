@@ -2,7 +2,7 @@ import logging
 import secrets
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
+from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
@@ -10,8 +10,8 @@ from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.feishu import FeishuClient
 from app.db.session import get_db
-from app.models.user import User, UserRole, UserStatus
-from app.schemas.user import LoginResponse, RefreshRequest, UserOut
+from app.models.user import UserRole, UserStatus
+from app.schemas.user import LoginResponse, UserOut
 from app.services.auth_service import AuthService
 from app.services.user_service import UserService
 from app.services.operation_log_service import OperationLogService
@@ -41,9 +41,11 @@ def feishu_authorize(response: Response):
 @router.get("/feishu/callback")
 async def feishu_callback(code: str = Query(...), state: str | None = Query(None),
                           request: Request = None, db: Session = Depends(get_db)):
-    """飞书回调：校验 state → code 换 JWT → 重定向回前端（token 经 query 传递，前端立即清理）
+    """飞书回调：校验 state → code 换 JWT → 重定向回前端
 
-    与 feishu_project_manager 模板同款流程：前端 /login?access_token=... 读取后 replace 清 URL。
+    token 经 URL **fragment**（#）传递而非 query：fragment 不会随请求发往服务端，
+    因此不进反向代理访问日志、不进 Referer、不进服务端历史记录；
+    前端 /login 读取后立即用 replaceState 清除。
     """
     expected = request.cookies.get(_STATE_COOKIE)
     if not expected or state != expected:
@@ -60,19 +62,14 @@ async def feishu_callback(code: str = Query(...), state: str | None = Query(None
         response.delete_cookie(_STATE_COOKIE)
         return response
 
-    query = urlencode({
+    # fragment 内仍用 query 编码，避免 JSON 中的 & / = 破坏解析
+    fragment = urlencode({
         "access_token": result.access_token,
         "user": result.user.model_dump_json(),
     })
-    response = RedirectResponse(url=f"{base}?{query}")
+    response = RedirectResponse(url=f"{base}#{fragment}")
     response.delete_cookie(_STATE_COOKIE)
     return response
-
-
-@router.post("/refresh", response_model=LoginResponse)
-async def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
-    """刷新 access token（refresh_token 走 body，不入 URL/日志）"""
-    return await AuthService(db).refresh(body.refresh_token)
 
 
 @router.post("/dev-login", response_model=LoginResponse)

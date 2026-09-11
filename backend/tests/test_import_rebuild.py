@@ -6,7 +6,6 @@
 2. 重建后 /scenarios 返回 中性/乐观/悲观 三个情景，网格各 38 行 @ 2026-08..2028-12
 3. 破坏性操作权限：拒绝非 admin/editor（此处用 dev-login admin 通过，viewer 403）
 """
-import json
 from pathlib import Path
 
 import pytest

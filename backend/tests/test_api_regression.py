@@ -6,7 +6,6 @@
 3. grid 端点行×期组装（曾字典推导把每行折叠成最后一个 period）
 4. recalc 无参幂等 + 参数增量按比例生效（端到端）
 """
-import json
 from decimal import Decimal
 
 import pytest

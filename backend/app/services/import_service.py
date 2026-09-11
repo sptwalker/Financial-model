@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """前端导入服务：上传现金流表格 → 重建基础数据（中性 + 克隆乐观/悲观）
 
-从 seed_from_excel.py / seed_budget_scenarios.py 抽出的可复用逻辑，供
+从 seed_from_excel.py 抽出的可复用逻辑，供
 POST /api/v1/imports/rebuild 调用。幂等：重复导入就地重建「中性」v1，
 克隆三方案对齐 2028-12 界。传入的 db session 为请求级会话（生产=Postgres），
 不依赖本地 SQLite 路径或全局 SessionLocal。
 
+事务边界：本模块内部只 flush，全流程在 rebuild_from_excel 末尾单次 commit；
+任一步异常由调用方（imports.py 端点）rollback，整体回滚不留半重建态。
+
 与脚本差异：
-- 路径参数化（xls_path/payroll_xlsx/report_xlsx），而非硬编码 ../docs/...
+- 路径参数化（xls_path/report_xlsx），而非硬编码 ../docs/...
 - 在传入 db 上执行；异常由调用方处理（端点捕获回滚）
 """
 from __future__ import annotations
@@ -65,7 +68,7 @@ def _seed_actuals(db: Session, scenario: Scenario) -> int:
                 db.add(SalesActual(period=month, channel=channel, units=units,
                                    source="seed", note="发售起点种子"))
             n += 1
-    db.commit()
+    db.flush()
     return n
 
 
@@ -118,7 +121,7 @@ def _clone(db: Session, src: Scenario, name: str, desc: str,
         for p, cell in per.items()
     ]
     db.bulk_save_objects(cells)
-    db.commit()
+    db.flush()
     return name, len(cells)
 
 
@@ -126,6 +129,7 @@ def _reset_clones(db: Session) -> int:
     """就地清空「乐观/悲观」的 versions/cells（保留 Scenario 行与 id）→ 清理条数。
 
     使重导入能按最新中性 + ±20% 逻辑重建克隆，而非保留旧平克隆。
+    只 flush 不 commit —— 与 rebuild_from_excel 同属一个事务，失败可整体回滚。
     """
     cleared = 0
     for name, _desc, _f in CLONES:
@@ -136,8 +140,7 @@ def _reset_clones(db: Session) -> int:
             synchronize_session=False)
         db.query(ModelVersion).filter(ModelVersion.scenario_id == dst.id).delete(
             synchronize_session=False)
-    if cleared:
-        db.commit()
+    db.flush()
     return cleared
 
 
@@ -180,7 +183,7 @@ def rebuild_from_excel(db: Session, xls_path: str | Path,
         db.query(ModelVersion).filter(ModelVersion.scenario_id == scenario.id).delete()
         scenario.description = "Excel「现金流中性」情景（2026.8 版数据）"
         scenario.is_active = True
-        db.commit()
+        db.flush()
     else:
         scenario = Scenario(name=SRC_NAME,
                             description="Excel「现金流中性」情景（2026.8 版数据）",
@@ -209,17 +212,20 @@ def rebuild_from_excel(db: Session, xls_path: str | Path,
                               period=p, row_key=row_key,
                               value=str(cell["value"]), source=cell["source"]))
     db.bulk_save_objects(cells)
-    db.commit()
+    db.flush()
 
     n_actual = _seed_actuals(db, scenario)
 
     # 克隆乐观/悲观（先清空旧克隆，再按 ±20% 未来期销量重算重建）
-    truncated = _reset_clones(db)
+    cleared_clones = _reset_clones(db)
     clone_res = []
     for name, desc, factor in CLONES:
         r = _clone(db, scenario, name, desc, factor, periods)
         if r:
             clone_res.append({"name": r[0], "cells": r[1]})
+
+    # 全流程唯一 commit：以上任一步异常 → 整体回滚（含情景清空），不留半重建态
+    db.commit()
 
     return {
         "scenario_id": scenario.id,
@@ -227,6 +233,6 @@ def rebuild_from_excel(db: Session, xls_path: str | Path,
         "periods": [periods[0], periods[-1]],
         "period_count": len(periods),
         "actuals": n_actual,
-        "truncated_2029": truncated,
+        "cleared_clones": cleared_clones,
         "clones": clone_res,
     }

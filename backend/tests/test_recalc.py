@@ -116,3 +116,58 @@ def test_recalc_inputs_override_sticky(seeded):
                comment="test: financing")
     new = _grid(db, r["version_no"])
     assert new["cash.financing|2026-09"] == Decimal("500")
+
+
+# ---------- 错误路径与脏数据容错 ----------
+
+def test_recalc_raises_on_missing_scenario_and_version(db):
+    """不存在的场景 / 无版本 → 抛 ValueError，由路由层翻译成 404"""
+    with pytest.raises(ValueError, match="scenario_not_found"):
+        recalc(db, 987654, comment="test: missing")
+    with pytest.raises(ValueError, match="scenario_not_found"):
+        preview_grid(db, 987654)
+
+
+def test_recalc_raises_no_version_for_empty_scenario(db):
+    """新建情景无版本 → no_version（而非 500）"""
+    from app.models.financial import Scenario
+    sc = Scenario(name="empty-for-recalc-test")
+    db.add(sc)
+    db.commit()
+    try:
+        with pytest.raises(ValueError, match="no_version"):
+            recalc(db, sc.id, comment="test: no version")
+    finally:
+        db.delete(sc)
+        db.commit()
+
+
+def test_parse_json_tolerates_corrupt_and_non_dict(seeded):
+    """快照 JSON 损坏 / 不是对象 → 回退空 dict，不抛异常（旧版本兼容）"""
+    from app.services.recalc_service import _parse_json
+    assert _parse_json(None) == {}
+    assert _parse_json("") == {}
+    assert _parse_json("{不是合法 JSON") == {}
+    assert _parse_json("[1,2,3]") == {}          # 合法 JSON 但非对象
+    assert _parse_json('{"a": 1}') == {"a": 1}
+
+
+def test_rebuild_inputs_skips_dirty_and_non_input_sources(seeded):
+    """回退重建：仅收 input/override 源；脏 Decimal 跳过而不中断"""
+    from app.services.recalc_service import rebuild_inputs
+
+    class _C:
+        def __init__(self, row_key, period, value, source):
+            self.row_key, self.period, self.value, self.source = row_key, period, value, source
+
+    cells = [
+        _C("qty.online", "2026-08", "10", "input"),
+        _C("qty.online", "2026-09", "11", "override"),
+        _C("sale.online.amount", "2026-08", "99999", "engine"),   # 非输入源 → 不收
+        _C("qty.offline", "2026-08", "坏数据", "input"),           # 脏值 → 跳过
+    ]
+    out = rebuild_inputs(cells)
+    assert set(out) == {"qty.online"}
+    assert out["qty.online"]["2026-09"] == Decimal("11")
+    assert "2026-08" in out["qty.online"]
+

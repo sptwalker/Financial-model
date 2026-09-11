@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 
@@ -16,20 +16,14 @@ class ScenarioUpdate(BaseModel):
 
 
 class ScenarioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     description: Optional[str] = None
     is_active: bool
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class CellWrite(BaseModel):
-    """单个单元格写入（override）"""
-    value: str  # Decimal 字符串，如 "781.992"
 
 
 class CellWriteBatch(BaseModel):

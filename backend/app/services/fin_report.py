@@ -16,12 +16,15 @@ from decimal import Decimal
 # 注：工资不在此映射（08 工资按工资表应付合计锚定，见 seed_from_excel）；
 # 研发费用主要为人员薪酬，与工资表重叠，不映射（避免重复计入）。
 # 财务费用 -6,228.07 引擎无对应行，不映射。
+# 已知口径近似：报表行项目比引擎费用行更粗（如「销售费用」整体归入 exp.online_promo，
+# 「管理费用」整体归入 exp.office_other），07 仅作已发生月近似锚点，用户已确认接受。
 INCOME_MAP = {
     "销售费用": "exp.online_promo",
     "管理费用": "exp.office_other",
 }
 
-# 资产负债表（利润表末列）中资产负债表右上角的期初余额 8,598,066.12
+# 资产负债表 2026-07-31 货币资金期末余额（元）→ 期初现金锚点 cash.opening["2026-08"]。
+# 该余额在报表中位于利润表工作表的末列，故解析时一并从该表读取。
 BALANCE_SHEET_TITLE = "资产负债表"
 
 
@@ -81,7 +84,6 @@ if __name__ == "__main__":
     import sys
     from pathlib import Path
 
-    from decimal import Decimal
     p = Path(sys.argv[1] if len(sys.argv) > 1 else
              "../docs/财务报表__202607期.xlsx")
     r = parse_report(p)

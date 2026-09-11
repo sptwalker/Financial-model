@@ -1,14 +1,14 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.permissions import PermissionChecker
 from app.db.session import get_db
-from app.models.user import User
 from app.models.financial import Scenario, ModelVersion, Cell
 from app.schemas.scenario import (
-    ScenarioCreate, ScenarioUpdate, ScenarioOut, CellWrite, CellWriteBatch,
+    ScenarioCreate, ScenarioUpdate, ScenarioOut, CellWriteBatch,
     RecalcRequest,
 )
 from app.services.operation_log_service import OperationLogService
@@ -54,8 +54,6 @@ def create_scenario(body: ScenarioCreate, db: Session = Depends(get_db),
 # ---------- 预算存档（按 version_no 归并三情景的同批保存）----------
 # 一次预算保存 = 一个 version_no 横跨中性/乐观/悲观三情景；存档即按 version_no 归并
 # 注意：本组路由须在 /{scenario_id} 之前声明，否则 "archives" 会被当作情景 id
-
-from pydantic import BaseModel
 
 
 class ArchiveRename(BaseModel):
@@ -295,6 +293,13 @@ def _get_grid(scenario_id: int, version_no: int | None, db: Session) -> tuple[in
         if not latest:
             raise HTTPException(status_code=404, detail="该情景尚未计算，请先导入或重算")
         version_no = latest.version_no
+    else:
+        # 显式指定的版本必须存在：否则会静默返回空网格，前端只看到一片空白
+        exists = (db.query(ModelVersion)
+                  .filter(ModelVersion.scenario_id == scenario_id,
+                          ModelVersion.version_no == version_no).first())
+        if not exists:
+            raise HTTPException(status_code=404, detail=f"版本 v{version_no} 不存在")
     cells = (db.query(Cell)
              .filter(Cell.scenario_id == scenario_id, Cell.model_version == version_no)
              .all())

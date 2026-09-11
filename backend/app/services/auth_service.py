@@ -2,7 +2,7 @@ from fastapi import HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.feishu import FeishuClient
-from app.core.security import create_access_token, verify_token
+from app.core.security import create_access_token
 from app.models.user import User, UserStatus
 from app.schemas.user import LoginResponse, UserOut
 from app.services.user_service import UserService
@@ -63,16 +63,6 @@ class AuthService:
             detail={"feishu_user_id": feishu_user_id},
             user_id=user.id, ip=request.client.host if request.client else None,
         )
-        return self._issue_tokens(user)
-
-    async def refresh(self, refresh_token: str) -> LoginResponse:
-        """刷新令牌 → 完整登录响应（含用户信息，与登录流程一致）"""
-        payload = verify_token(refresh_token)
-        if not payload or payload.get("type") != "refresh":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="刷新令牌无效")
-        user = UserService.get_by_id(self.db, int(payload["sub"]))
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
         return self._issue_tokens(user)
 
     def _issue_tokens(self, user: User) -> LoginResponse:

@@ -16,7 +16,6 @@
 
 from dataclasses import dataclass, field
 from decimal import Decimal, getcontext
-from typing import Optional
 
 getcontext().prec = 28  # 保证 Decimal 运算精确，存储时按 20,8 截断
 
@@ -110,9 +109,6 @@ class Params:
     # 订阅
     sub_ratio: Decimal = Decimal("0.7")            # 订阅比例
     sub_revenue_per_unit: Decimal = Decimal("200")  # 单台订阅收益（元/台/年，月度收入 ÷12）
-    # 营销费率
-    online_mkt_rate: Decimal = Decimal("0.30")
-    offline_mkt_rate: Decimal = Decimal("0.23")
     # 渠道佣金费率（渠道佣金=线下销售×费率）
     channel_commission_rate: Decimal = Decimal("0.05")
     # 营销费用自动测算（预算页开关）：开启后佣金/推广费按当期销售额×费率，忽略输入值
@@ -234,12 +230,10 @@ def run(periods: list[str], params: Params,
     def inp(row: str, i: int) -> Decimal:
         return inputs.get(row, {}).get(periods[i], zero)
 
-    # 年度目标（存于各年 12 月）——订阅不再用年度目标覆盖，改为始终累积口径
-    sales_targets = _row_year_targets(inputs, TARGET_SALES, periods)
-
     # ---------- 1. 销量：输入或年度目标季节化（线上/线下分渠道摊） ----------
     qty_online = [inp(QTY_ONLINE, i) for i in range(n)]
     qty_offline = [inp(QTY_OFFLINE, i) for i in range(n)]
+    # 年度目标（存于各年 12 月）——订阅不再用年度目标覆盖，改为始终累积口径
     sales_targets = _row_year_targets(inputs, TARGET_SALES, periods)
     target_years = set(sales_targets)
     if sales_targets:
@@ -384,7 +378,10 @@ def run(periods: list[str], params: Params,
         CASH_GAP: cash_gap,
         CASH_CLOSE: cash_close, EXPENSE_TOTAL: exp_total,
     }
-    # 输入行直接透传（目标年已被月度化 → 用计算后的行值覆盖网格）
+    # 输入行直接透传；qty 与费用行用处理后的值覆盖
+    # （CASH_OPEN 同时属于 INPUT_ROWS 与 COMPUTED_ROWS，此处透传的静态期初链
+    #   与第 6 步滚动结果在 Excel 口径下逐期相等，见 tests/test_reconcile.py
+    #   test_cash_opening_rolls_like_excel —— 属用户确认口径，非缺陷）
     for row in INPUT_ROWS:
         rows[row] = [inp(row, i) for i in range(n)]
     for row, vals in ((QTY_ONLINE, qty_online), (QTY_OFFLINE, qty_offline)):

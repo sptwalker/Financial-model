@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.permissions import PermissionChecker
@@ -7,7 +7,6 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.operation_log import OperationLog
 from app.schemas.user import UserOut, UserRoleUpdate, UserStatusUpdate, LogItem, LogPage
 from app.services.operation_log_service import OperationLogService
-from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 

@@ -7,7 +7,7 @@
 from decimal import Decimal
 
 from app.engine.reconcile import (
-    TOL, reconcile_rows, engine_value, annual_engine_sum,
+    TOL, reconcile_rows, annual_engine_sum,
 )
 
 # 2027-08..2027-12 当月订阅（Excel 行值，Excel 口径=当月销量×0.7×200，供口径对比）
@@ -23,18 +23,22 @@ def test_no_unexplained_differences(fixture):
     categories, bugs = reconcile_rows(imp, grid, params, [])
     assert bugs == [], f"存在未解释差异：{bugs}"
     assert categories["BUG"] == 0
-    assert categories["MATCH"] >= 300  # 绝大多数单元格口径对齐后一致
+    # 每格恰好分类一次（既不漏计也不因行级汇总重复计数）
+    assert sum(categories.values()) == 428
 
 
 def test_match_count_baseline(fixture):
-    """分类计数与基线一致（防止分类器误改导致口径漂移）。
+    """口径分类基线：防止分类器误改导致口径漂移。
 
-    订阅修复后：2028 订阅年度合计不再等于 Excel 目标 2461.2（改为累积口径），
-    该格由 MATCH 转入订阅行既有的 KNOWN_RULE_DIFF：324→323、56→57，BUG 仍为 0。"""
+    订阅修复后 2028 订阅年度合计不再等于 Excel 目标 2461.2（改为累积口径），
+    该格由 MATCH 转入订阅行既有的 KNOWN_RULE_DIFF。
+    分类计数只统计「可比单元格」：Excel 侧 2026-07 合并表头行与部分全年列
+    不参与逐格比较，故 428 < Excel 值槽位总数。BUG 必须为 0。"""
     imp, grid, params, salary_08 = fixture
     categories, bugs = reconcile_rows(imp, grid, params, [])
+    assert bugs == []
     assert (categories["MATCH"], categories["KNOWN_QUIRK"],
-            categories["KNOWN_RULE_DIFF"], categories["BUG"]) == (323, 73, 57, 0)
+            categories["KNOWN_RULE_DIFF"], categories["BUG"]) == (298, 73, 57, 0)
 
 
 def test_subscription_monthly_matches_excel(fixture):

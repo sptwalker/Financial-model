@@ -129,10 +129,6 @@ export default function Budget() {
     if (e !== undefined) return e
     return baseGrid?.cells?.[row]?.[p]?.value ?? '0'
   }
-  const groupVal = (row, months) => {
-    const sum = months.reduce((a, p) => a + Number(effIn(row, p) || 0), 0)
-    return months.length === 1 ? r2(Number(effIn(row, months[0]) || 0)) : r2(sum)
-  }
   const setGroup = (row, months, v) => {
     const total = Number(v || 0)
     const n = months.length
@@ -182,14 +178,19 @@ export default function Budget() {
   const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
 
   // 营销自动测算下，展示值始终来自引擎预览（区别于基线存档）→ 恒预览；防抖 400ms（不建版本）
+  // 用 seq 守卫丢弃过期响应：连续编辑时后发的预览可能先返回，否则会被旧结果覆盖
+  const previewSeq = useRef(0)
   useEffect(() => {
     if (!neutralId || !baseGrid) return
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
+      const seq = ++previewSeq.current
       try {
         const p = await previewRecalc(neutralId, { params: enginePayload(factor), inputs: inputsPayload() })
+        if (seq !== previewSeq.current) return
         setPreview(p)
       } catch (e) {
+        if (seq !== previewSeq.current) return
         setMsg('预览失败：' + String(e.response?.data?.detail || e.message))
       }
     }, 400)
@@ -301,7 +302,7 @@ export default function Budget() {
           )}
 
           <Section title="销售设置（万台 / 万元）" tone="sales" rows={BUDGET_SALES_QTY}
-            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup}
+            periods={periods} effIn={effIn} setGroup={setGroup}
             edits={edits} factor={factor}
             top={(
               <div className="budget-params">
@@ -317,14 +318,14 @@ export default function Budget() {
             note="2028 销量由年度目标驱动，逐月编辑可能被目标覆盖；乐观/悲观按销量整体 ±20%。" />
 
           <Section title="研发预算（万元）" tone="rd" rows={RD}
-            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
+            periods={periods} effIn={effIn} setGroup={setGroup} edits={edits} />
           <Section title="营销预算（万元）" tone="mkt" rows={MKT}
-            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits}
+            periods={periods} effIn={effIn} setGroup={setGroup} edits={edits}
             autoRows={AUTO_MKT} autoIn={compIn} autoRev={preview}
             rateKeyFor={rateKeyFor} pctVal={pctVal} setRate={setRate}
             note="渠道佣金/推广费＝线下销售额×费率，线上推广费＝线上销售额×分年费率；系数在各年金额下方微调（渠道费率各年一致），随销量与费率自动测算（灰底为只读结果）。" />
           <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
-            periods={periods} effIn={effIn} groupVal={groupVal} setGroup={setGroup} edits={edits} />
+            periods={periods} effIn={effIn} setGroup={setGroup} edits={edits} />
           <FinancingSection periods={periods} effIn={effIn} setEdits={setEdits} baseGrid={baseGrid} />
 
           <div className="action-row">
@@ -467,7 +468,7 @@ function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
   )
 }
 
-function Section({ title, tone, rows, periods, effIn, groupVal, setGroup, edits, factor = 1, top, note,
+function Section({ title, tone, rows, periods, effIn, setGroup, edits, factor = 1, top, note,
                   autoRows = EMPTY_SET, autoIn = null, autoRev = null,
                   rateKeyFor = null, pctVal = null, setRate = null }) {
   const [gran, setGran] = useState('year')

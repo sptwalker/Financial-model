@@ -1,23 +1,32 @@
 import React, { useState, useEffect } from 'react'
 import { feishuAuthorizeUrl, devLogin } from '../api'
 
+/** 解析 URL fragment（#a=1&b=2）为 URLSearchParams；无 fragment 返回空 */
+function hashParams() {
+  const h = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash
+  return new URLSearchParams(h)
+}
+
 export default function Login({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState(null)
 
-  // 飞书回调落地：/login?access_token=...&user=... → 存储后清 URL 进入系统
+  // 飞书回调落地：/login#access_token=...&user=... → 存储后清 fragment 进入系统。
+  // token 放 fragment 而非 query：fragment 不随请求发往服务端，
+  // 因此不进代理日志 / Referer / 服务端历史（后端 auth.py 对应改动）。
   useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const error = params.get('error')
+    const query = new URLSearchParams(location.search)
+    const hash = hashParams()
+    const error = query.get('error') || hash.get('error')
     if (error) {
       setErr(error)
       window.history.replaceState({}, '', '/login')
       return
     }
-    const token = params.get('access_token')
+    const token = hash.get('access_token') || query.get('access_token')
     if (!token) return
     try {
-      const user = JSON.parse(params.get('user'))
+      const user = JSON.parse(hash.get('user') || query.get('user'))
       localStorage.setItem('token', token)
       localStorage.setItem('user', JSON.stringify(user))
       window.history.replaceState({}, '', '/login')

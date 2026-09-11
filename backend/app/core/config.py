@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 from functools import lru_cache
 from pathlib import Path
@@ -6,6 +6,11 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     """应用配置"""
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parent.parent / ".env",
+        case_sensitive=True,
+    )
 
     # 应用基础配置
     APP_NAME: str = "创想悦动现金流预测系统"
@@ -21,7 +26,6 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-only-secret-key-please-override-in-production-0123456789"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12  # 看板场景，12 小时会话
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # 飞书应用配置（创想悦动自建应用）
     FEISHU_APP_ID: str = ""
@@ -46,10 +50,6 @@ class Settings(BaseSettings):
 
     # 开发模拟登录开关（生产 compose 置 false，双保险关闭 dev-login）
     ENABLE_DEV_LOGIN: bool = True
-
-    class Config:
-        env_file = Path(__file__).resolve().parent.parent / ".env"
-        case_sensitive = True
 
     @model_validator(mode="after")
     def _guard_secret_key(self):

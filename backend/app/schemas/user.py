@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     feishu_user_id: str
     name: str
@@ -13,9 +15,6 @@ class UserOut(BaseModel):
     status: str
     created_at: datetime | None = None
     last_login_at: datetime | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class UserRoleUpdate(BaseModel):
@@ -46,13 +45,3 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserOut
-
-
-class RefreshResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str

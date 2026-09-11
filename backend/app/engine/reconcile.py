@@ -131,7 +131,7 @@ def annual_engine_sum(grid: dict, excel_key: str, year: int) -> Decimal:
 
 def reconcile_rows(imp: dict, grid: dict, params: Params, lines: list) -> list[str]:
     """逐行对账 → (行说明行, BUG 明细)。返回 (lines 尾部, bugs)"""
-    inputs, excel, periods = imp["inputs"], imp["excel"], imp["periods"]
+    excel = imp["excel"]
     excel_sub = excel.get("sale.subscription.amount", {})   # Excel 订阅行（2027-08 起）
     categories = {"MATCH": 0, "KNOWN_QUIRK": 0, "KNOWN_RULE_DIFF": 0, "BUG": 0}
     bugs: list[str] = []
@@ -199,8 +199,6 @@ def reconcile_rows(imp: dict, grid: dict, params: Params, lines: list) -> list[s
             status = "BUG"
             categories["BUG"] += len(row_bugs)
             bugs.extend(f"{excel_key} | {d}" for d in row_bugs)
-        else:
-            categories["MATCH"] += 1
         lines.append(f"  {status:<4} {ROW_NAMES.get(excel_key, excel_key)}"
                      f"（{len(cells)} 个 Excel 值）")
         for d in row_bugs:
@@ -328,7 +326,7 @@ def load_fixture():
 
 def build_report(imp: dict, grid: dict, params: Params, salary_08: Decimal) -> tuple[str, list[str]]:
     """生成对账报告文本 + BUG 明细（不写盘）"""
-    inputs, excel, periods = imp["inputs"], imp["excel"], imp["periods"]
+    periods = imp["periods"]
     lines = [
         f"对账报告：引擎 vs Excel「现金流中性」  "
         f"期间 {periods[0]}..{periods[-1]}（{len(periods)} 期）  容差 {TOL}",
