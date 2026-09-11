@@ -15,6 +15,7 @@ export const ROW_GROUPS = [
       { key: 'sale.offline.amount', label: '线下销售额', editable: false },
       { key: 'sale.accessory.amount', label: '配件收入', editable: false },
       { key: 'sale.subscription.amount', label: '订阅收入', editable: false },
+      { key: 'sale.valueadd.amount', label: '增值收入', editable: false },
       { key: 'sale.total.amount', label: '销售额合计', editable: false },
     ],
   },
@@ -24,6 +25,7 @@ export const ROW_GROUPS = [
       { key: 'collect.online', label: '线上回款', editable: false },
       { key: 'collect.offline', label: '线下回款', editable: false },
       { key: 'collect.subscription', label: '订阅回款', editable: false },
+      { key: 'collect.valueadd', label: '增值回款', editable: false },
       { key: 'collect.total', label: '回款合计', editable: false },
     ],
   },
@@ -120,6 +122,8 @@ export const BUDGET_SALES_PARAMS = [
   { key: 'acc_revenue_per_unit', label: '单台配件收入（元）', step: '1' },
   { key: 'sub_ratio', label: '订阅比例（续费率）', step: '0.01' },
   { key: 'sub_revenue_per_unit', label: '订阅单价（元/台/年）', step: '1' },
+  { key: 'valueadd_ratio', label: '增值付费占比', step: '0.01' },
+  { key: 'valueadd_revenue_per_unit', label: '增值单价（元/台/年，0=关闭）', step: '1' },
 ]
 
 // 营销费率系数（预算页可调；引擎 auto_marketing 开启后按销售额×费率自动测算）
@@ -151,6 +155,8 @@ export const PARAM_FIELDS = [
   { key: 'acc_revenue_per_unit', label: '单台配件收入（元）', step: '1' },
   { key: 'sub_ratio', label: '订阅比例', step: '0.01', hint: '累计装机 × 订阅比例 × 200' },
   { key: 'sub_revenue_per_unit', label: '单台订阅收益（元）', step: '1' },
+  { key: 'valueadd_ratio', label: '增值付费占比', step: '0.01', hint: '累计装机 × 占比 × 增值单价 ÷12' },
+  { key: 'valueadd_revenue_per_unit', label: '单台增值收益（元/年，0=关闭）', step: '1' },
   { key: 'channel_commission_rate', label: '渠道佣金费率', step: '0.001', hint: '= 线下销售 × 费率' },
   { key: 'purchase_lag', label: '采购付款账期（N+M）', step: '1', hint: '2 = N+2，3 = N+3' },
 ]
@@ -160,6 +166,7 @@ export const CASH_COLORS = {
   'sale.offline.amount': '#5ad8a6',
   'sale.accessory.amount': '#f6bd16',
   'sale.subscription.amount': '#9254de',
+  'sale.valueadd.amount': '#13c2a3',
 }
 
 // 预测方法阶梯（与后端 forecast_service.MIN_* 门槛一致；min=解锁所需有效历史月数）

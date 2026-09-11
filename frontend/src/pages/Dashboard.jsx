@@ -159,7 +159,7 @@ export default function Dashboard({ user, onLogout }) {
   const salesOption = useMemo(() => {
     if (!grid) return {}
     const keys = ['sale.online.amount', 'sale.offline.amount',
-      'sale.accessory.amount', 'sale.subscription.amount']
+      'sale.accessory.amount', 'sale.subscription.amount', 'sale.valueadd.amount']
     return {
       tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 2) },
       legend: { bottom: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },

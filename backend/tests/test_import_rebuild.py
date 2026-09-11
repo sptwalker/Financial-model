@@ -61,13 +61,13 @@ def _files():
 
 
 def test_import_rebuild_returns_expected_counts(client):
-    """三件套导入 → 重建 中性 v1：1102 cells / 29 期 / 4 actuals"""
+    """三件套导入 → 重建 中性 v1：1160 cells / 29 期 / 4 actuals"""
     r = client.post("/api/v1/imports/rebuild",
                     headers=_auth(_token(client)), files=_files())
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
-    assert body["cells"] == 1102
+    assert body["cells"] == 1160
     assert body["periods"] == ["2026-08", "2028-12"]
     assert body["period_count"] == 29
     assert body["actuals"] == 4
@@ -82,7 +82,7 @@ def test_import_rebuild_scenarios_and_grid(client):
 
     mid = next(s for s in scs if s["name"] == "中性")["id"]
     grid = client.get(f"/api/v1/scenarios/{mid}/grid", headers=_auth(token)).json()["cells"]
-    assert len(grid) == 38
+    assert len(grid) == 40
     assert grid["qty.online"]["2026-08"]["source"] == "input"
     assert set(grid["sale.total.amount"]) >= {"2026-08", "2028-12"}
 

@@ -36,6 +36,7 @@ SALE_ONLINE = "sale.online.amount"
 SALE_OFFLINE = "sale.offline.amount"
 SALE_ACC = "sale.accessory.amount"
 SALE_SUB = "sale.subscription.amount"
+SALE_VALUEADD = "sale.valueadd.amount"   # 增值收入（第5类收入流，累计装机×ARPU，默认 0）
 SALE_TOTAL = "sale.total.amount"
 
 # 采购（万元）——引擎计算
@@ -47,6 +48,7 @@ PURCHASE_TOTAL = "purchase.total"
 COLLECT_ONLINE = "collect.online"
 COLLECT_OFFLINE = "collect.offline"
 COLLECT_SUB = "collect.subscription"
+COLLECT_VALUEADD = "collect.valueadd"   # 增值收入回款（即时 [1]）
 COLLECT_TOTAL = "collect.total"
 
 # 现金（万元）——引擎计算（期初首期为输入）
@@ -80,9 +82,9 @@ AUTO_MKT_ROWS = frozenset({"exp.channel_commission", "exp.channel_promo", "exp.o
 
 # 全部引擎计算行
 COMPUTED_ROWS = frozenset({
-    QTY_TOTAL, SALE_ONLINE, SALE_OFFLINE, SALE_ACC, SALE_SUB, SALE_TOTAL,
+    QTY_TOTAL, SALE_ONLINE, SALE_OFFLINE, SALE_ACC, SALE_SUB, SALE_VALUEADD, SALE_TOTAL,
     PURCHASE_MAIN, PURCHASE_ACC, PURCHASE_TOTAL,
-    COLLECT_ONLINE, COLLECT_OFFLINE, COLLECT_SUB, COLLECT_TOTAL,
+    COLLECT_ONLINE, COLLECT_OFFLINE, COLLECT_SUB, COLLECT_VALUEADD, COLLECT_TOTAL,
     CASH_IN, CASH_EXP, CASH_GAP, CASH_CLOSE, EXPENSE_TOTAL,
 })
 
@@ -109,6 +111,10 @@ class Params:
     # 订阅
     sub_ratio: Decimal = Decimal("0.7")            # 订阅比例
     sub_revenue_per_unit: Decimal = Decimal("200")  # 单台订阅收益（元/台/年，月度收入 ÷12）
+    # 增值收入（第5类收入流）：与订阅同口径，累计装机×比例×ARPU/12，即时到账。
+    # 默认 ARPU=0 → 增值收入全期为 0，不影响 Excel 对账基线；用户在预算/参数页填入即启用。
+    valueadd_ratio: Decimal = Decimal("0.7")            # 增值付费用户占累计装机比例
+    valueadd_revenue_per_unit: Decimal = Decimal("0")   # 单台增值收益（元/台/年，月度 ÷12）
     # 渠道佣金费率（渠道佣金=线下销售×费率）
     channel_commission_rate: Decimal = Decimal("0.05")
     # 营销费用自动测算（预算页开关）：开启后佣金/推广费按当期销售额×费率，忽略输入值
@@ -122,6 +128,7 @@ class Params:
     collect_weight_online: list = field(default_factory=lambda: [Decimal("0.5"), Decimal("0.5")])
     collect_weight_offline: list = field(default_factory=lambda: [Decimal("0"), Decimal("1")])
     collect_weight_sub: list = field(default_factory=lambda: [Decimal("1")])
+    collect_weight_valueadd: list = field(default_factory=lambda: [Decimal("1")])
     # 采购付款账期（N+M）：[0,0,1]=N+2，[0,0,0,1]=N+3（可配置）
     purchase_lag: int = 2
     # 2026-07 前累计装机量（万台，按现金流量表数值）
@@ -290,8 +297,11 @@ def run(periods: list[str], params: Params,
     _q8 = Decimal("0.00000001")
     sale_sub = [(install[i + 1] * p.sub_ratio * p.sub_revenue_per_unit / 12).quantize(_q8)
                 for i in range(n)]
-    sale_total = [a + b + c + d for a, b, c, d in
-                  zip(sale_online, sale_offline, sale_acc, sale_sub)]
+    # 增值收入（第5类）：同累计装机口径，ARPU 默认 0 → 全期 0（不动对账基线）
+    sale_valueadd = [(install[i + 1] * p.valueadd_ratio * p.valueadd_revenue_per_unit / 12).quantize(_q8)
+                     for i in range(n)]
+    sale_total = [a + b + c + d + e for a, b, c, d, e in
+                  zip(sale_online, sale_offline, sale_acc, sale_sub, sale_valueadd)]
 
     # ---------- 3. 采购付款（N+M 账期） ----------
     buy_main = [q * p.cost_main for q in qty_total]
@@ -309,6 +319,7 @@ def run(periods: list[str], params: Params,
     col_online = [zero] * n
     col_offline = [zero] * n
     col_sub = [zero] * n
+    col_valueadd = [zero] * n
     for i in range(n):
         w = p.collect_weight_online
         for k, weight in enumerate(w):
@@ -322,7 +333,11 @@ def run(periods: list[str], params: Params,
         for k, weight in enumerate(w):
             if i + k < n and weight != 0:
                 col_sub[i + k] += sale_sub[i] * weight
-    col_total = [a + b + c for a, b, c in zip(col_online, col_offline, col_sub)]
+        w = p.collect_weight_valueadd
+        for k, weight in enumerate(w):
+            if i + k < n and weight != 0:
+                col_valueadd[i + k] += sale_valueadd[i] * weight
+    col_total = [a + b + c + d for a, b, c, d in zip(col_online, col_offline, col_sub, col_valueadd)]
 
     # ---------- 5. 费用（直接输入；目标年全年值 → 按月摊开） ----------
     exp_by_row = {row: [inp(row, i) for i in range(n)] for row in EXPENSE_ROWS}
@@ -370,10 +385,10 @@ def run(periods: list[str], params: Params,
     rows: dict[str, list] = {
         QTY_TOTAL: qty_total,
         SALE_ONLINE: sale_online, SALE_OFFLINE: sale_offline,
-        SALE_ACC: sale_acc, SALE_SUB: sale_sub, SALE_TOTAL: sale_total,
+        SALE_ACC: sale_acc, SALE_SUB: sale_sub, SALE_VALUEADD: sale_valueadd, SALE_TOTAL: sale_total,
         PURCHASE_MAIN: pur_main, PURCHASE_ACC: pur_acc, PURCHASE_TOTAL: pur_total,
         COLLECT_ONLINE: col_online, COLLECT_OFFLINE: col_offline,
-        COLLECT_SUB: col_sub, COLLECT_TOTAL: col_total,
+        COLLECT_SUB: col_sub, COLLECT_VALUEADD: col_valueadd, COLLECT_TOTAL: col_total,
         CASH_OPEN: cash_open, CASH_IN: col_total, CASH_EXP: cash_exp,
         CASH_GAP: cash_gap,
         CASH_CLOSE: cash_close, EXPENSE_TOTAL: exp_total,

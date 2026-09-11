@@ -153,10 +153,10 @@ describe('营销自动测算行', () => {
 })
 
 describe('配色与预测阶梯', () => {
-  it('CASH_COLORS 覆盖四类收入流', () => {
+  it('CASH_COLORS 覆盖五类收入流', () => {
     expect(Object.keys(CASH_COLORS).sort()).toEqual([
       'sale.accessory.amount', 'sale.offline.amount',
-      'sale.online.amount', 'sale.subscription.amount',
+      'sale.online.amount', 'sale.subscription.amount', 'sale.valueadd.amount',
     ])
   })
 
