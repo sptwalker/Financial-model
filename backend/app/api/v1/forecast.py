@@ -103,6 +103,30 @@ def upsert_actuals(body: ActualBatch, db: Session = Depends(get_db),
     return {"ok": True, "upserted": n}
 
 
+@router.get("/actuals/template")
+def actuals_template(current_user=Depends(get_current_user)):
+    """下载历史销量导入模板（.xlsx）——表头与 /actuals/import 解析口径一致"""
+    import io
+    import openpyxl
+    from fastapi.responses import StreamingResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "历史销量"
+    ws.append(["月份", "线上(万台)", "线下(万台)"])
+    # 两行示例：填真实数据时整表覆盖即可，重复期间按 period+channel 覆盖更新
+    ws.append(["2026-01", 3.5, 1.2])
+    ws.append(["2026-02", 3.8, 1.3])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="actuals_template.xlsx"'},
+    )
+
+
 @router.post("/actuals/import")
 def import_actuals(file: UploadFile = File(...), db: Session = Depends(get_db),
                    current_user=Depends(get_current_user)):

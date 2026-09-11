@@ -104,6 +104,17 @@ export async function importActuals(file) {
   return data
 }
 
+// 下载历史销量导入模板：走 axios（带 Bearer），拿 blob 后触发浏览器保存
+export async function downloadActualsTemplate() {
+  const { data } = await api.get('/forecast/actuals/template', { responseType: 'blob' })
+  const url = URL.createObjectURL(data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'actuals_template.xlsx'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // 前端导入重建基础数据：现金流测算.xls + 财务报表.xlsx
 export async function importRebuild(files) {
   const fd = new FormData()

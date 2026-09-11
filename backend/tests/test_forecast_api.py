@@ -107,6 +107,22 @@ def test_import_rejects_non_xlsx(client, auth):
     assert r.status_code == 400
 
 
+def test_actuals_template_roundtrips_through_import(client, auth):
+    """下载的模板必须能原样喂回 /import —— 表头/列序两端一致，否则模板是误导"""
+    r = client.get("/api/v1/forecast/actuals/template", headers=auth)
+    assert r.status_code == 200, r.text
+    assert "spreadsheetml" in r.headers["content-type"]
+    import openpyxl
+    ws = openpyxl.load_workbook(io.BytesIO(r.content), data_only=True).active
+    assert [c.value for c in ws[1]] == ["月份", "线上(万台)", "线下(万台)"]
+
+    imp = client.post("/api/v1/forecast/actuals/import", headers=auth,
+                      files={"file": ("t.xlsx", r.content,
+                                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["upserted"] == 4               # 2 示例月 × 2 渠道
+
+
 # ---------- 运行 ----------
 
 def test_run_forecast_endpoint(client, auth):

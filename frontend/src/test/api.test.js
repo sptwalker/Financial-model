@@ -11,7 +11,7 @@ import api, {
   devLogin, getGrid, gridPeriods, listScenarios, listLogs, listArchives,
   putCells, recalc, previewRecalc, releaseVersion, unreleaseVersion,
   renameArchive, deleteArchive, updateUserRole, updateUserStatus,
-  importActuals, importRebuild, fmt,
+  importActuals, importRebuild, downloadActualsTemplate, fmt,
 } from '../api'
 
 let mock
@@ -157,6 +157,21 @@ describe('文件上传', () => {
       return [200, {}]
     })
     await importRebuild({ main: new File(['a'], 'a.xls'), report: new File(['b'], 'b.xlsx') })
+  })
+
+  it('downloadActualsTemplate 以 blob 拉取模板并触发下载', async () => {
+    mock.onGet('/forecast/actuals/template').reply((cfg) => {
+      expect(cfg.responseType).toBe('blob')
+      return [200, new Blob(['x'])]
+    })
+    // jsdom 无 createObjectURL / a.click 落地，桩掉只验证调用链
+    URL.createObjectURL = vi.fn(() => 'blob:x')
+    URL.revokeObjectURL = vi.fn()
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    await downloadActualsTemplate()
+    expect(mock.history.get[0].url).toBe('/forecast/actuals/template')
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
   })
 })
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
 import {
-  applyForecast, fmt, importActuals, listActuals, listScenarios,
-  runForecast, upsertActuals,
+  applyForecast, downloadActualsTemplate, fmt, importActuals, listActuals,
+  listScenarios, runForecast, upsertActuals,
 } from '../api'
 import { FORECAST_METHODS, SCENARIO_COLORS } from '../rows'
 
@@ -261,6 +261,7 @@ export default function Forecast({ user }) {
           {canEdit && (
             <div className="fc-toolbar pc-only">
               <button className="btn" onClick={() => setShowEntry(true)}>{IPlus}手工录入</button>
+              <button className="btn" onClick={() => downloadActualsTemplate()}>下载模板</button>
               <button className="btn" onClick={() => fileRef.current?.click()}>{IUp}导入 Excel</button>
               <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }}
                 onChange={(e) => onImport(e.target.files[0])} />
