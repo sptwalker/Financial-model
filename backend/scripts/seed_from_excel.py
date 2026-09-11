@@ -30,10 +30,13 @@ from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.models.financial import Scenario, ModelVersion, Cell  # noqa: E402
 from app.models.forecast import SalesActual  # noqa: E402
 from app.services.fin_report import parse_report  # noqa: E402
+from app.services.payroll import (  # noqa: E402
+    FIXTURE as PAYROLL_XLSX,
+    payroll_total_payable as payroll_total_payable_yuan,
+)
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 XLS = BACKEND_DIR.parent / "docs" / "现金流测算 2026.8.xls"
-PAYROLL_XLSX = BACKEND_DIR.parent / "docs" / "2026年7月创想悦动工资表.xlsx"
 FIN_REPORT_XLSX = BACKEND_DIR.parent / "docs" / "财务报表__202607期.xlsx"
 
 # 已发生月（发售起点 2026-07 起）；真实销量到位后逐月追加，预测只从 sales_actuals 读历史
@@ -72,19 +75,9 @@ def seed_actuals(db) -> int:
     return n
 
 
-def payroll_total_payable(xlsx: Path) -> Decimal:
-    """工资表「汇总」sheet 总计行应付工资（万元）"""
-    wb = openpyxl.load_workbook(xlsx, data_only=True)
-    ws = wb["汇总"]
-    hdr = None
-    for row in ws.iter_rows(values_only=True):
-        if hdr is None and row and "应付工资" in row:
-            hdr = row
-            continue
-        if hdr is not None and row and row[0] == "总计":
-            payable = row[hdr.index("应付工资")]
-            return Decimal(str(payable)) / Decimal("10000")
-    raise ValueError(f"工资表 {xlsx.name} 未找到总计行/应付工资列")
+def payroll_total_payable(xlsx: Path | None = None) -> Decimal:
+    """应付工资合计（万元）。解析逻辑单点在 app.services.payroll，读脱敏夹具。"""
+    return payroll_total_payable_yuan(xlsx) / Decimal("10000")
 
 
 def main():

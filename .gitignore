@@ -35,5 +35,13 @@ Thumbs.db
 # Excel lock/temp
 ~$*.xls*
 
+# 个人隐私数据 —— 严禁入库
+# 工资表/社保明细/公积金清单含员工姓名、身份证号、逐人金额，属于个人敏感信息。
+# 如需本地使用，请放在仓库外（例如 ~/Financial-model-隐私备份/），切勿提交。
+# 种子与对账走脱敏夹具 backend/fixtures/payroll_2026-07.xlsx（见 app/services/payroll.py）。
+docs/*工资表*.xlsx
+docs/*社保*.xlsx
+docs/*公积金*.xlsx
+
 # Claude Code local settings
 .claude/settings.local.json

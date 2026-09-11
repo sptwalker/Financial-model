@@ -34,10 +34,15 @@ import openpyxl  # noqa: E402
 
 from app.engine.excel_import import import_xls  # noqa: E402
 from app.engine.calculator import run, Params  # noqa: E402
+from app.services.payroll import (  # noqa: E402
+    FIXTURE as PAYROLL_FIXTURE,
+    payroll_total_payable as _payroll_total_payable_yuan,
+)
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 XLS = BACKEND_DIR.parent / "docs" / "现金流测算 2026.8.xls"
-PAYROLL_XLSX = BACKEND_DIR.parent / "docs" / "2026年7月创想悦动工资表.xlsx"
+# 工资表已移出仓库（含个人信息），改读脱敏夹具；见 app/services/payroll.py
+PAYROLL_XLSX = PAYROLL_FIXTURE
 TOL = Decimal("0.05")
 
 # 全年引用列（Excel 表头 2028 = 全年）：比较改为「引擎全年合计 vs Excel 全年值」
@@ -65,18 +70,9 @@ ROW_NAMES = {
 }
 
 
-def payroll_total_payable(xlsx: Path) -> Decimal:
-    """工资表「汇总」sheet 总计行应付工资（万元）"""
-    wb = openpyxl.load_workbook(xlsx, data_only=True)
-    ws = wb["汇总"]
-    hdr = None
-    for row in ws.iter_rows(values_only=True):
-        if hdr is None and row and "应付工资" in row:
-            hdr = row
-            continue
-        if hdr is not None and row and row[0] == "总计":
-            return Decimal(str(row[hdr.index("应付工资")])) / Decimal("10000")
-    raise ValueError(f"工资表 {xlsx.name} 未找到总计行/应付工资列")
+def payroll_total_payable(xlsx: Path | None = None) -> Decimal:
+    """应付工资合计（万元），来自脱敏夹具；解析逻辑见 app.services.payroll"""
+    return _payroll_total_payable_yuan(xlsx) / Decimal("10000")
 
 
 def acc_online_share(grid: dict, p: str) -> Decimal:
