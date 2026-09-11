@@ -102,6 +102,16 @@ body {
 .stat-value { font-size: 21px; font-weight: 700; margin-top: 4px; letter-spacing: -0.2px; }
 .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
+/* 复盘对比：Δ 徽标与变更格高亮（红=升 绿=降，方向即数值增减，不含好坏判断） */
+.stat-delta { font-size: 12px; font-weight: 700; margin-top: 4px; }
+.stat-delta.up { color: var(--red); }
+.stat-delta.down { color: var(--green); }
+.cell-changed { background: #fff7e6; }
+.cell-delta { display: block; font-size: 10px; font-weight: 600; }
+.cell-delta.up { color: var(--red); }
+.cell-delta.down { color: var(--green); }
+.cmp-select { max-width: 40vw; }
+
 /* ---------- 卡片 ---------- */
 .card {
   background: var(--card);

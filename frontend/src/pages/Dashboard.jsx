@@ -3,6 +3,7 @@ import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc,
   releaseVersion, unreleaseVersion } from '../api'
 import { ROW_GROUPS, BUDGET_COST_GROUPS, rowInfo, CASH_COLORS } from '../rows'
+import { cellDelta } from '../diff'
 import { TRIAL_KEY } from './Budget'
 
 const r2 = (n) => Math.round(n * 100) / 100
@@ -46,6 +47,8 @@ export default function Dashboard({ user, onLogout }) {
   const [scenarioId, setScenarioId] = useState(null)
   const [versions, setVersions] = useState([])
   const [versionNo, setVersionNo] = useState(null)
+  const [cmpVersionNo, setCmpVersionNo] = useState(null)  // 复盘对比版本（null=不对比）
+  const [cmpGrid, setCmpGrid] = useState(null)
   const [grid, setGrid] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -98,6 +101,19 @@ export default function Dashboard({ user, onLogout }) {
     return () => { stale = true }
   }, [scenarioId, versionNo, nonce])
 
+  // 复盘对比版本的网格（只读快照，不受试算影响）
+  useEffect(() => {
+    if (!scenarioId || cmpVersionNo === null || cmpVersionNo === versionNo) {
+      setCmpGrid(null)
+      return
+    }
+    let stale = false
+    getGrid(scenarioId, cmpVersionNo)
+      .then((g) => { if (!stale) setCmpGrid(g) })
+      .catch(() => !stale && setCmpGrid(null))
+    return () => { stale = true }
+  }, [scenarioId, cmpVersionNo, versionNo])
+
   const clearTrial = () => { localStorage.removeItem(TRIAL_KEY); setNonce((n) => n + 1) }
 
   const periods = useMemo(
@@ -107,18 +123,22 @@ export default function Dashboard({ user, onLogout }) {
 
   const stats = useMemo(() => {
     if (!grid) return null
-    const sum = (key) => periods.reduce(
-      (a, p) => a + Number(grid.cells[key]?.[p]?.value ?? 0), 0)
-    const last = (key) => Number(grid.cells[key]?.[periods[periods.length - 1]]?.value ?? 0)
-    return {
-      sale: sum('sale.total.amount'),
-      collect: sum('collect.total'),
-      expense: sum('exp.total'),
-      purchase: sum('purchase.total'),
-      cashClose: last('cash.closing'),
-      cashOpen: Number(grid.cells['cash.opening']?.[periods[0]]?.value ?? 0),
+    const statsOf = (g) => {
+      const sum = (key) => periods.reduce(
+        (a, p) => a + Number(g.cells[key]?.[p]?.value ?? 0), 0)
+      const last = (key) => Number(g.cells[key]?.[periods[periods.length - 1]]?.value ?? 0)
+      return {
+        sale: sum('sale.total.amount'),
+        collect: sum('collect.total'),
+        expense: sum('exp.total'),
+        purchase: sum('purchase.total'),
+        cashClose: last('cash.closing'),
+        cashOpen: Number(g.cells['cash.opening']?.[periods[0]]?.value ?? 0),
+      }
     }
-  }, [grid, periods])
+    const cur = statsOf(grid)
+    return cmpGrid ? { ...cur, cmp: statsOf(cmpGrid) } : cur
+  }, [grid, cmpGrid, periods])
 
   const salesOption = useMemo(() => {
     if (!grid) return {}
@@ -295,6 +315,14 @@ export default function Dashboard({ user, onLogout }) {
                 </option>
               ))}
             </select>
+            <select className="cmp-select" title="选一个历史版本做复盘对比"
+              value={cmpVersionNo ?? ''}
+              onChange={(e) => setCmpVersionNo(e.target.value === '' ? null : Number(e.target.value))}>
+              <option value="">不对比</option>
+              {(versions || []).filter((v) => v.version_no !== versionNo).map((v) => (
+                <option key={v.version_no} value={v.version_no}>对比 v{v.version_no} · {v.comment}</option>
+              ))}
+            </select>
             <label className="lock-toggle" title="勾选后此版本存档受删除保护，需取消勾选才能删除">
               <input type="checkbox" checked={isReleased}
                 disabled={!isAdmin || versionNo == null}
@@ -317,18 +345,24 @@ export default function Dashboard({ user, onLogout }) {
         </div>
       )}
       {recalcMsg && <div className="recalc-msg">{recalcMsg}</div>}
+      {cmpGrid && (
+        <div className="recalc-msg">
+          复盘对比中：v{versionNo} vs v{cmpVersionNo}（卡片与明细表显示 Δ = 本版 − 对比版，红升绿降）
+          <button className="link-btn" onClick={() => setCmpVersionNo(null)} style={{ marginLeft: 8 }}>取消对比</button>
+        </div>
+      )}
 
       {loading && !grid ? (
         <div className="loading">加载中…</div>
       ) : grid && stats ? (
         <>
           <section className="stats-grid">
-            <Stat label="累计销售额" value={fmt(stats.sale, 0)} sub="万元" tone="blue" />
-            <Stat label="累计回款" value={fmt(stats.collect, 0)} sub="万元" tone="green" />
-            <Stat label="累计费用" value={fmt(stats.expense, 0)} sub="万元" tone="orange" />
-            <Stat label="累计采购" value={fmt(stats.purchase, 0)} sub="万元" tone="red" />
-            <Stat label="期初现金" value={fmt(stats.cashOpen, 0)} sub="万元" tone="gray" />
-            <Stat label="期末现金" value={fmt(stats.cashClose, 0)} sub="万元" tone="gray" />
+            <Stat label="累计销售额" value={fmt(stats.sale, 0)} sub="万元" tone="blue" delta={stats.cmp && stats.sale - stats.cmp.sale} />
+            <Stat label="累计回款" value={fmt(stats.collect, 0)} sub="万元" tone="green" delta={stats.cmp && stats.collect - stats.cmp.collect} />
+            <Stat label="累计费用" value={fmt(stats.expense, 0)} sub="万元" tone="orange" delta={stats.cmp && stats.expense - stats.cmp.expense} />
+            <Stat label="累计采购" value={fmt(stats.purchase, 0)} sub="万元" tone="red" delta={stats.cmp && stats.purchase - stats.cmp.purchase} />
+            <Stat label="期初现金" value={fmt(stats.cashOpen, 0)} sub="万元" tone="gray" delta={stats.cmp && stats.cashOpen - stats.cmp.cashOpen} />
+            <Stat label="期末现金" value={fmt(stats.cashClose, 0)} sub="万元" tone="gray" delta={stats.cmp && stats.cashClose - stats.cmp.cashClose} />
           </section>
 
           <section className="card">
@@ -369,28 +403,36 @@ export default function Dashboard({ user, onLogout }) {
       </footer>
 
       {showTable && (
-        <FullTable periods={periods} grid={grid} onClose={() => setShowTable(false)} />
+        <FullTable periods={periods} grid={grid} cmpGrid={cmpGrid}
+          versionNo={versionNo} cmpVersionNo={cmpVersionNo} onClose={() => setShowTable(false)} />
       )}
     </div>
   )
 }
 
-function Stat({ label, value, sub, tone }) {
+function Stat({ label, value, sub, tone, delta }) {
+  // delta：与对比版本之差（本版−对比版）。费用/采购升为红、其余按数值方向着色仅表示增减
+  const show = typeof delta === 'number' && Math.abs(delta) >= 0.5
   return (
     <div className={`stat stat-${tone}`}>
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       <div className="stat-sub">{sub}</div>
+      {show && (
+        <div className={`stat-delta ${delta > 0 ? 'up' : 'down'}`}>
+          {delta > 0 ? '▲' : '▼'} {fmt(Math.abs(delta), 0)}
+        </div>
+      )}
     </div>
   )
 }
 
-function FullTable({ periods, grid, onClose }) {
+function FullTable({ periods, grid, cmpGrid, versionNo, cmpVersionNo, onClose }) {
   return (
     <div className="modal-mask" onClick={onClose}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <strong>全部指标 · 全部月份（万元）</strong>
+          <strong>全部指标 · 全部月份（万元）{cmpGrid ? ` · 复盘 v${versionNo} vs v${cmpVersionNo}` : ''}</strong>
           <button className="link-btn" onClick={onClose}>关闭</button>
         </div>
         <div className="table-wrap">
@@ -405,9 +447,19 @@ function FullTable({ periods, grid, onClose }) {
               {ROW_GROUPS.flatMap((g) => g.rows).map((r) => (
                 <tr key={r.key}>
                   <td className="row-name">{r.label}</td>
-                  {periods.map((p) => (
-                    <td key={p}>{fmt(grid.cells[r.key]?.[p]?.value, 2)}</td>
-                  ))}
+                  {periods.map((p) => {
+                    if (!cmpGrid) return <td key={p}>{fmt(grid.cells[r.key]?.[p]?.value, 2)}</td>
+                    const d = cellDelta(grid, cmpGrid, r.key, p)
+                    return (
+                      <td key={p} className={d.changed ? 'cell-changed' : ''}
+                        title={d.changed ? `本版 ${fmt(d.a, 2)} · 对比 ${fmt(d.b, 2)}` : ''}>
+                        {fmt(d.a, 2)}
+                        {d.changed && <span className={`cell-delta ${d.delta > 0 ? 'up' : 'down'}`}>
+                          {d.delta > 0 ? '+' : ''}{fmt(d.delta, 2)}
+                        </span>}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>
