@@ -27,10 +27,10 @@ export function clampFactor(pct) {
   return Math.min(FACTOR_MAX, Math.max(FACTOR_MIN, f))
 }
 
-// 系数 → 百分比（用于回显输入框）
+// 系数 → 百分比（用于回显输入框）；取整，避免 (1.2-1)*100 的浮点噪声
 export function factorPct(factor) {
   const f = Number(factor)
-  return Number.isFinite(f) ? (f - 1) * 100 : 0
+  return Number.isFinite(f) ? Math.round((f - 1) * 100) : 0
 }
 
 // 相对系数：目标 / 当前实际系数；当前值缺失或非法按 1（避免除零与叠乘）

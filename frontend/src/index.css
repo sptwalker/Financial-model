@@ -41,8 +41,6 @@ body {
   margin: 0 auto;
   padding: 16px 14px 24px;
 }
-/* 宽版页面（对比页）：桌面撑满可视区（超宽屏留 1440 上限），移动端仍留边距 */
-.page--wide { max-width: 1440px; padding-left: 12px; padding-right: 12px; }
 
 .app-header {
   display: flex;

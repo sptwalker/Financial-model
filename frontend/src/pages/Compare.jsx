@@ -139,7 +139,7 @@ export default function Compare() {
   const anyGrid = Object.values(grids).some(Boolean)
 
   return (
-    <div className="page page--wide">
+    <div className="page">
       <header className="app-header">
         <div>
           <h1>情景对比</h1>
