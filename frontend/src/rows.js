@@ -122,8 +122,6 @@ export const BUDGET_SALES_PARAMS = [
   { key: 'acc_revenue_per_unit', label: '单台配件收入（元）', step: '1' },
   { key: 'sub_ratio', label: '订阅比例（续费率）', step: '0.01' },
   { key: 'sub_revenue_per_unit', label: '订阅单价（元/台/年）', step: '1' },
-  { key: 'valueadd_ratio', label: '增值付费占比', step: '0.01' },
-  { key: 'valueadd_revenue_per_unit', label: '增值单价（元/台/年，0=关闭）', step: '1' },
 ]
 
 // 营销费率系数（预算页可调；引擎 auto_marketing 开启后按销售额×费率自动测算）
