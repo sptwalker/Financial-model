@@ -8,7 +8,9 @@ import pytest
 
 from app.engine.calculator import Params
 from app.models.financial import Cell, ModelVersion, Scenario
-from app.services.recalc_service import recalc, merge_params, preview_grid
+from app.services.recalc_service import (
+    recalc, merge_params, preview_grid, scenario_scale,
+)
 
 
 @pytest.fixture(scope="module")
@@ -99,6 +101,92 @@ def test_merge_params_ignores_stale_snapshot_keys():
     p = merge_params({"price_online": "1999", "online_mkt_rate": "0.3"}, None)
     assert p.price_online == Decimal("1999")
     assert not hasattr(p, "online_mkt_rate")
+
+
+def test_scenario_scale_identity_for_baseline(seeded):
+    """基线情景自己的系数恒为 1"""
+    r = scenario_scale(seeded, 1, 1)
+    assert Decimal(r["factor"]) == 1
+    assert Decimal(r["qty_ratio"]) == 1
+
+
+def test_scenario_scale_reads_baked_qty_ratio(seeded):
+    """导入克隆把系数乘进 qty 行（qty_scale 仍为 1）→ 观测比值应还原出系数
+
+    这是对比页调节系数不叠乘的前提：若只读 params.qty_scale 会得到 1，
+    于是在已含 1.2 的情景上再乘 1.3 变成 1.56。
+    """
+    src = seeded.query(Scenario).filter(Scenario.id == 1).first()
+    opt = Scenario(name="_test_乐观", description="t", is_active=False,
+                   created_by=src.created_by)
+    seeded.add(opt)
+    seeded.flush()
+    latest = _latest(seeded)
+    inputs = json.loads(latest.inputs_json)
+    for qk in ("qty.online", "qty.offline"):
+        for p in inputs.get(qk, {}):
+            if p >= "2026-09":
+                inputs[qk][p] = str(Decimal(str(inputs[qk][p])) * Decimal("1.2"))
+    seeded.add(ModelVersion(
+        scenario_id=opt.id, version_no=1, comment="test clone ×1.2", source="import",
+        params_json=latest.params_json,
+        inputs_json=json.dumps(inputs, ensure_ascii=False),
+        created_by=src.created_by,
+    ))
+    seeded.flush()
+    # 网格单元格（_load_baseline 要求有 cells）
+    for rk, per in preview_grid(seeded, 1, None).items():
+        for p, c in per.items():
+            seeded.add(Cell(scenario_id=opt.id, model_version=1, period=p,
+                            row_key=rk, value=c["value"], source=c["source"]))
+    seeded.flush()
+    try:
+        r = scenario_scale(seeded, opt.id, 1)
+        assert Decimal(r["stored_scale"]) == 1          # 克隆没写 qty_scale
+        assert Decimal(r["qty_ratio"]).quantize(Decimal("0.0001")) == Decimal("1.2000")
+        assert Decimal(r["factor"]).quantize(Decimal("0.0001")) == Decimal("1.2000")
+    finally:
+        seeded.query(Cell).filter(Cell.scenario_id == opt.id).delete()
+        seeded.query(ModelVersion).filter(ModelVersion.scenario_id == opt.id).delete()
+        seeded.query(Scenario).filter(Scenario.id == opt.id).delete()
+        seeded.commit()
+
+
+def test_scenario_scale_multiplies_both_representations(db):
+    """预算页写法（qty 中性 + qty_scale=1.2）与克隆写法（qty 已乘）应得到同一倍数"""
+    seeded_ids = [s.id for s in db.query(Scenario).filter(Scenario.name == "中性").all()]
+    assert seeded_ids, "无中性情景"
+    src_id = seeded_ids[0]
+    latest = (db.query(ModelVersion).filter(ModelVersion.scenario_id == src_id)
+              .order_by(ModelVersion.version_no.desc()).first())
+    if not latest:
+        pytest.skip("中性情景无版本")
+
+    params = json.loads(latest.params_json or "{}")
+    params["qty_scale"] = "1.2"
+    other = Scenario(name="_test_预算写法", description="t", is_active=False)
+    db.add(other)
+    db.flush()
+    db.add(ModelVersion(scenario_id=other.id, version_no=1, comment="t", source="recalc",
+                        params_json=json.dumps(params, ensure_ascii=False),
+                        inputs_json=latest.inputs_json))
+    db.flush()
+    try:
+        # qty 中性（未乘）→ 比值 1，但 qty_scale 1.2 ⇒ 合起来 1.2
+        for rk, per in preview_grid(db, src_id, None).items():
+            for p, c in per.items():
+                db.add(Cell(scenario_id=other.id, model_version=1, period=p,
+                            row_key=rk, value=c["value"], source=c["source"]))
+        db.flush()
+        r = scenario_scale(db, other.id, src_id)
+        assert Decimal(r["stored_scale"]) == Decimal("1.2")
+        assert Decimal(r["qty_ratio"]).quantize(Decimal("0.0001")) == Decimal("1.0000")
+        assert Decimal(r["factor"]).quantize(Decimal("0.0001")) == Decimal("1.2000")
+    finally:
+        db.query(Cell).filter(Cell.scenario_id == other.id).delete()
+        db.query(ModelVersion).filter(ModelVersion.scenario_id == other.id).delete()
+        db.query(Scenario).filter(Scenario.id == other.id).delete()
+        db.commit()
 
 
 def test_preview_does_not_persist(seeded):

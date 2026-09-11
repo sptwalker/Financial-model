@@ -41,6 +41,8 @@ body {
   margin: 0 auto;
   padding: 16px 14px 24px;
 }
+/* 宽版页面（对比页）：桌面撑满可视区（超宽屏留 1440 上限），移动端仍留边距 */
+.page--wide { max-width: 1440px; padding-left: 12px; padding-right: 12px; }
 
 .app-header {
   display: flex;
@@ -77,6 +79,27 @@ body {
   background: none; border: none; color: var(--muted);
   font-size: 13px; cursor: pointer; padding: 4px;
 }
+.link-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------- 情景销量系数（对比页） ---------- */
+.coef-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px; margin-bottom: 8px;
+}
+.coef-item {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 9px; padding: 8px 10px; min-width: 0;
+}
+.coef-label { font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+.coef-item input {
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  border: none; background: transparent; color: var(--text);
+  font-size: 15px; font-weight: 600; text-align: right;
+  font-variant-numeric: tabular-nums; padding: 2px 0;
+}
+.coef-item input:focus { outline: none; }
+.coef-unit { font-size: 12px; color: var(--muted); flex: 0 0 auto; }
 
 /* ---------- 统计卡 ---------- */
 .stats-grid {
@@ -317,6 +340,12 @@ body {
 .data-table .row-name, .data-table td.row-name {
   text-align: left; position: sticky; left: 0; background: var(--card); font-weight: 500;
 }
+/* 列少的并排表（对比页）：撑满容器，各列等分，避免右侧留白 */
+.data-table--wide { width: 100%; table-layout: fixed; }
+.data-table--wide th, .data-table--wide td { text-align: center; }
+.data-table--wide th:first-child, .data-table--wide td:first-child { width: 22%; }
+/* 表头副行：情景列回显当前生效的销量系数 */
+.th-sub { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 
 /* ---------- 桌面适配 ---------- */
 @media (min-width: 640px) {

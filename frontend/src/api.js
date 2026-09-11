@@ -59,6 +59,14 @@ export async function getVersions(scenarioId) {
   return data
 }
 
+// 情景的未来期销量系数（相对基线情景）→ {scenario_id, stored_scale, qty_ratio, factor}
+export async function getScenarioScale(scenarioId, baselineId) {
+  const { data } = await api.get(`/scenarios/${scenarioId}/scale`, {
+    params: baselineId == null ? {} : { baseline_id: baselineId },
+  })
+  return data
+}
+
 export async function putCells(scenarioId, cells) {
   const { data } = await api.put(`/scenarios/${scenarioId}/cells`, { cells })
   return data

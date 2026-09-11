@@ -134,6 +134,46 @@ def preview_grid(db: Session, scenario_id: int, params_override: dict | None = N
             for row, per in grid.items()}
 
 
+# 未来期销量系数的观测起点：已发生月（≤ 该界）三情景一致，不参与系数比较
+_SCALE_FROM_PERIOD = "2026-09"
+_QTY_KEYS = ("qty.online", "qty.offline")
+
+
+def scenario_scale(db: Session, scenario_id: int,
+                   baseline_id: int | None = None) -> dict:
+    """情景的「未来期销量系数」——相对基线情景的倍数（基线缺省取第一个情景）。
+
+    系数在库里没有单一存放处，两种写法并存，故两者相乘：
+    - 导入克隆：系数直接乘进了 qty 输入行，params.qty_scale 仍是 1
+    - 预算页保存：qty 输入行保持中性，系数写在 params.qty_scale
+    相乘后两种写法都得到正确倍数（克隆 1.2×1=1.2；预算 1×1.2=1.2）。
+
+    仅在基线与本情景共有的未来期上比较，避免期间轴不一致时算偏。
+    """
+    latest, inputs, periods = _load_baseline(db, scenario_id)
+    params = merge_params(_parse_json(latest.params_json), None)
+    stored = Decimal(str(params.qty_scale))
+
+    if baseline_id is None or baseline_id == scenario_id:
+        return {"scenario_id": scenario_id, "stored_scale": str(stored),
+                "qty_ratio": "1", "factor": str(stored)}
+
+    b_latest, b_inputs, b_periods = _load_baseline(db, baseline_id)
+    fwd = [p for p in sorted(set(periods) & set(b_periods)) if p >= _SCALE_FROM_PERIOD]
+    num = den = Decimal(0)
+    for key in _QTY_KEYS:
+        for p in fwd:
+            cur, base = inputs.get(key, {}).get(p), b_inputs.get(key, {}).get(p)
+            if cur is None or base is None:
+                continue
+            num += Decimal(str(cur))
+            den += Decimal(str(base))
+    # 基线销量为 0（或无共有未来期）→ 比值无意义，只用已存系数
+    ratio = (num / den) if den else Decimal(1)
+    return {"scenario_id": scenario_id, "stored_scale": str(stored),
+            "qty_ratio": str(ratio), "factor": str(ratio * stored)}
+
+
 def recalc(db: Session, scenario_id: int, params_override: dict | None = None,
            comment: str | None = None, user_id: int | None = None,
            inputs_override: dict | None = None) -> dict:

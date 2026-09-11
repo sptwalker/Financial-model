@@ -12,7 +12,7 @@ from app.schemas.scenario import (
     RecalcRequest,
 )
 from app.services.operation_log_service import OperationLogService
-from app.services.recalc_service import recalc, preview_grid
+from app.services.recalc_service import recalc, preview_grid, scenario_scale
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -196,6 +196,23 @@ def list_versions(scenario_id: int, db: Session = Depends(get_db),
     ]
     return {"scenario_id": scenario_id, "versions": versions,
             "params": json.loads(latest.params_json) if latest and latest.params_json else None}
+
+
+@router.get("/{scenario_id}/scale")
+def get_scenario_scale(scenario_id: int, baseline_id: int | None = None,
+                       db: Session = Depends(get_db),
+                       current_user=Depends(get_current_user)):
+    """情景的未来期销量系数（相对基线情景，默认第一个情景）。
+
+    对比页调节乐观/悲观系数时用它取得「当前实际倍数」，避免在已含 1.2 的
+    情景上再次叠乘。系数库里没有单一存放处（克隆进 qty / 预算写 qty_scale），
+    故由 recalc_service.scenario_scale 统一观测换算。
+    """
+    try:
+        return scenario_scale(db, scenario_id, baseline_id)
+    except (ValueError, TypeError) as e:
+        code, detail = _RECALC_ERRORS.get(str(e), (400, f"读取系数失败: {e}"))
+        raise HTTPException(status_code=code, detail=detail)
 
 
 @router.post("/{scenario_id}/versions/{version_no}/release")

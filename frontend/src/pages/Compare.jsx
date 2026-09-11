@@ -1,9 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from '../components/Chart'
-import { fmt, getGrid, getVersions, gridPeriods, listScenarios } from '../api'
+import {
+  fmt, getGrid, getScenarioScale, getVersions, gridPeriods, listScenarios, previewRecalc,
+} from '../api'
+import {
+  DEFAULT_OPTIMISTIC, DEFAULT_PESSIMISTIC, FACTOR_MAX, FACTOR_MIN,
+  clampFactor, factorPct, scaleOverride, scenarioKind,
+} from '../scenario'
 
 // 情景对比页（阶段5 · P1-5）：同一存档点（version_no 横跨三情景）下，把
 // 中性/乐观/悲观并排比对。以中性为基线，非基线列显示 Δ 与高亮，一眼看清方案分歧。
+// 乐观/悲观销量系数可当场调节（默认 ±20%）——调节即按相对系数重算预览，不写库。
 
 // 并排展示的关键指标：sum=全期合计，last=期末值
 const METRICS = [
@@ -32,8 +39,12 @@ export default function Compare() {
   const [versions, setVersions] = useState([])
   const [versionNo, setVersionNo] = useState(null)
   const [grids, setGrids] = useState({})     // {scenarioId: grid | null}
+  const [factors, setFactors] = useState({})  // {scenarioId: 当前实际销量系数}
+  const [optPct, setOptPct] = useState(factorPct(DEFAULT_OPTIMISTIC))
+  const [pesPct, setPesPct] = useState(factorPct(DEFAULT_PESSIMISTIC))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const seq = useRef(0)                        // 预览请求序号，丢弃过期响应
 
   useEffect(() => {
     (async () => {
@@ -45,25 +56,59 @@ export default function Compare() {
         const { versions: vs } = await getVersions(base.id)
         setVersions(vs)
         setVersionNo(vs[0]?.version_no ?? null)
+        // 各情景当前实际销量系数（相对中性）：调系数时据此算相对值，避免叠乘
+        const pairs = await Promise.all(scs.map((s) =>
+          getScenarioScale(s.id, base.id)
+            .then((d) => [s.id, Number(d.factor)])
+            .catch(() => [s.id, 1])
+        ))
+        setFactors(Object.fromEntries(pairs))
       } catch (e) {
         setError(String(e.response?.data?.detail || e.message)); setLoading(false)
       }
     })()
   }, [])
 
+  // 各情景「本次要用的系数」：中性恒 1，乐观/悲观取滑杆值
+  const factorByScn = useMemo(() => {
+    const out = {}
+    for (const s of scenarios) {
+      const kind = scenarioKind(s.name)
+      if (kind === 'optimistic') out[s.id] = clampFactor(optPct)
+      else if (kind === 'pessimistic') out[s.id] = clampFactor(pesPct)
+    }
+    return out
+  }, [scenarios, optPct, pesPct])
+
+  // 存档点网格：系数未改动 → 直接用存档值；改动的情景 → 按相对系数重算预览
+  // seq 守卫：连续输入时后发的预览可能先返回，否则旧结果会覆盖新结果
   useEffect(() => {
     if (versionNo === null || !scenarios.length) return
     let stale = false
+    const mySeq = ++seq.current
     setLoading(true)
-    Promise.all(scenarios.map((s) =>
-      getGrid(s.id, versionNo).then((g) => [s.id, g]).catch(() => [s.id, null])
-    )).then((pairs) => {
-      if (stale) return
+    Promise.all(scenarios.map((s) => {
+      const target = factorByScn[s.id]
+      const override = target == null ? null : scaleOverride(factors[s.id], target)
+      if (!override) {
+        return getGrid(s.id, versionNo).then((g) => [s.id, g]).catch(() => [s.id, null])
+      }
+      return previewRecalc(s.id, { params: override })
+        .then((g) => [s.id, g]).catch(() => [s.id, null])
+    })).then((pairs) => {
+      if (stale || mySeq !== seq.current) return
       setGrids(Object.fromEntries(pairs))
       setLoading(false)
     })
     return () => { stale = true }
-  }, [versionNo, scenarios])
+  }, [versionNo, scenarios, factorByScn, factors])
+
+  const backToDefault = () => {
+    setOptPct(factorPct(DEFAULT_OPTIMISTIC))
+    setPesPct(factorPct(DEFAULT_PESSIMISTIC))
+  }
+  const coeffDirty = Math.abs(clampFactor(optPct) - DEFAULT_OPTIMISTIC) > 1e-9 ||
+    Math.abs(clampFactor(pesPct) - DEFAULT_PESSIMISTIC) > 1e-9
 
   // 期间轴取任一已加载情景（三情景同期）
   const periods = useMemo(() => {
@@ -94,7 +139,7 @@ export default function Compare() {
   const anyGrid = Object.values(grids).some(Boolean)
 
   return (
-    <div className="page">
+    <div className="page page--wide">
       <header className="app-header">
         <div>
           <h1>情景对比</h1>
@@ -111,6 +156,7 @@ export default function Compare() {
       {error && <div className="error-banner">{error}</div>}
       <p className="hint" style={{ padding: '0 14px' }}>
         以「{scenarios[0]?.name || '中性'}」为基线，乐观/悲观列显示 Δ（相对基线，红升绿降）。
+        系数调节为实时预览，不写库。
       </p>
 
       {loading && !anyGrid ? (
@@ -118,13 +164,53 @@ export default function Compare() {
       ) : anyGrid ? (
         <>
           <section className="card">
+            <div className="budget-sec-head">
+              <h2>情景销量系数</h2>
+              <button className="link-btn" onClick={backToDefault} disabled={!coeffDirty}>
+                恢复默认（±20%）
+              </button>
+            </div>
+            <div className="coef-grid">
+              <label className="coef-item">
+                <span className="coef-label" style={{ color: SCN_COLOR['乐观'] }}>乐观</span>
+                <input type="number" step="1" value={optPct}
+                  min={(FACTOR_MIN - 1) * 100} max={(FACTOR_MAX - 1) * 100}
+                  onChange={(e) => setOptPct(e.target.value === '' ? '' : Number(e.target.value))}
+                  onBlur={() => setOptPct(optPct === '' ? 0 : optPct)} />
+                <span className="coef-unit">%</span>
+              </label>
+              <label className="coef-item">
+                <span className="coef-label" style={{ color: SCN_COLOR['悲观'] }}>悲观</span>
+                <input type="number" step="1" value={pesPct}
+                  min={(FACTOR_MIN - 1) * 100} max={(FACTOR_MAX - 1) * 100}
+                  onChange={(e) => setPesPct(e.target.value === '' ? '' : Number(e.target.value))}
+                  onBlur={() => setPesPct(pesPct === '' ? 0 : pesPct)} />
+                <span className="coef-unit">%</span>
+              </label>
+            </div>
+            <p className="hint">
+              销量整体缩放，如乐观 +30% 即未来期销量 ×1.3；范围 {(FACTOR_MIN - 1) * 100}% ~ +{(FACTOR_MAX - 1) * 100}%。
+            </p>
+          </section>
+
+          <section className="card">
             <h2>关键指标并排（万元）</h2>
             <div className="table-wrap">
-              <table className="data-table">
+              <table className="data-table data-table--wide">
                 <thead>
                   <tr>
                     <th>指标</th>
-                    {scenarios.map((s) => <th key={s.id}>{s.name}</th>)}
+                    {scenarios.map((s) => {
+                      const f = factorByScn[s.id]
+                      return (
+                        <th key={s.id}>
+                          {s.name}
+                          {f != null && (
+                            <span className="th-sub">销量 ×{f.toFixed(2)}</span>
+                          )}
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody>
