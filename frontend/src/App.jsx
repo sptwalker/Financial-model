@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 're
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Budget from './pages/Budget'
+import Compare from './pages/Compare'
 import Params from './pages/Params'
 import Admin from './pages/Admin'
 
@@ -40,6 +41,7 @@ function Shell({ user, onLogout }) {
         <Routes>
           <Route path="/" element={<Dashboard user={user} onLogout={onLogout} />} />
           <Route path="/budget" element={<Budget />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/params" element={<Params user={user} onImport={() => navigate('/')} />} />
           {user.role === 'admin' && <Route path="/admin" element={<Admin user={user} />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -48,6 +50,7 @@ function Shell({ user, onLogout }) {
       <nav className="tab-bar">
         <NavLink to="/budget">预算</NavLink>
         <NavLink to="/" end>看板</NavLink>
+        <NavLink to="/compare">对比</NavLink>
         <NavLink to="/params">设置</NavLink>
         {user.role === 'admin' && <NavLink to="/admin">管理</NavLink>}
       </nav>
