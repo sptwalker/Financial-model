@@ -94,6 +94,13 @@ def test_merge_params_layering():
     assert p2.price_offline == base["price_offline"]
 
 
+def test_merge_params_ignores_stale_snapshot_keys():
+    """旧快照残留的已废弃字段（如 online_mkt_rate）不应让 Params(**) 崩溃，只丢弃"""
+    p = merge_params({"price_online": "1999", "online_mkt_rate": "0.3"}, None)
+    assert p.price_online == Decimal("1999")
+    assert not hasattr(p, "online_mkt_rate")
+
+
 def test_preview_does_not_persist(seeded):
     """预览端点：叠加 inputs/params 实时算，不建版本；网格反映融资注入"""
     db = seeded

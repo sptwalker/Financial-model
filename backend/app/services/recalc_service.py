@@ -7,7 +7,7 @@
 结果：新 ModelVersion（携带新 inputs/params 快照）+ 全量 Cells。
 """
 import json
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -56,7 +56,9 @@ def merge_params(snapshot: dict | None, override: dict | None) -> Params:
         merged.update(_coerce_params(snapshot))
     if override:
         merged.update(_coerce_params(override))
-    return Params(**merged)
+    # 丢弃引擎已废弃/改名的历史字段（旧快照可能残留，如 online_mkt_rate），否则 Params(**) 报错
+    valid = {f.name for f in fields(Params)}
+    return Params(**{k: v for k, v in merged.items() if k in valid})
 
 
 def rebuild_inputs(cells: list[Cell]) -> dict[str, dict[str, Decimal]]:
