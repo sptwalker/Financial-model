@@ -30,19 +30,19 @@ describe('avgCost', () => {
 describe('priceAverages', () => {
   const packages = [{ id: 'p1', price: 2000 }, { id: 'p2', price: 1000 }]
   const channels = [
-    { id: 'c1', name: '天猫', side: 'online', cost: 100 },
-    { id: 'c2', name: '创维', side: 'offline', cost: 50 },
+    { id: 'c1', name: '天猫', side: 'online', cost: 5 },  // 5%
+    { id: 'c2', name: '创维', side: 'offline', cost: 10 }, // 10%
   ]
-  it('各层净价 = (Σ定价×量 − Σ渠道成本×量) ÷ Σ量', () => {
+  it('渠道成本为定价%；各层净价 = (Σ定价×量 − Σ定价×成本%×量) ÷ Σ量', () => {
     const lines = [
-      { channelId: 'c1', packageId: 'p1', qty: 1 }, // 线上 2000, 成本100
-      { channelId: 'c2', packageId: 'p2', qty: 1 }, // 线下 1000, 成本50
+      { channelId: 'c1', packageId: 'p1', qty: 1 }, // 线上 2000, 成本5% → 100
+      { channelId: 'c2', packageId: 'p2', qty: 1 }, // 线下 1000, 成本10% → 100
     ]
     const r = priceAverages(packages, channels, lines)
-    expect(r.online.net).toBe(1900)
-    expect(r.offline.net).toBe(950)
+    expect(r.online.net).toBe(1900)            // 2000 − 2000×5%
+    expect(r.offline.net).toBe(900)            // 1000 − 1000×10%
     expect(r.overall.gross).toBe(1500)         // (2000+1000)/2
-    expect(r.overall.net).toBe(1425)           // (3000-150)/2
+    expect(r.overall.net).toBe(1400)           // (3000-200)/2
     expect(r.byChannel).toHaveLength(2)
   })
   it('无销量 → 各层 null', () => {

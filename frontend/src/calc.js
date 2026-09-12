@@ -22,7 +22,7 @@ export function avgCost(grid, periods) {
 }
 
 // 平均售价：包装决定定价、渠道决定渠道成本与线上/线下归属。
-// 每层净价 = (Σ定价×数量 − Σ渠道成本×数量) ÷ Σ数量。
+// 渠道成本为定价的百分比；每层净价 = (Σ定价×数量 − Σ定价×成本%×数量) ÷ Σ数量。
 export function priceAverages(packages, channels, lines) {
   const priceOf = (id) => Number(packages.find((x) => x.id === id)?.price ?? 0)
   const chan = (id) => channels.find((x) => x.id === id)
@@ -35,12 +35,12 @@ export function priceAverages(packages, channels, lines) {
     const q = Number(ln.qty) || 0
     if (!c || q <= 0) continue
     const price = priceOf(ln.packageId)
-    const cost = Number(c.cost) || 0
+    const costPer = price * (Number(c.cost) || 0) / 100 // 渠道成本为定价百分比
     for (const bucket of [acc[c.side], acc.all]) {
-      bucket.qty += q; bucket.gross += price * q; bucket.costWt += cost * q
+      bucket.qty += q; bucket.gross += price * q; bucket.costWt += costPer * q
     }
-    const cur = byChannel.get(c.id) || { ...blank(), name: c.name, side: c.side, cost }
-    cur.qty += q; cur.gross += price * q; cur.costWt += cost * q
+    const cur = byChannel.get(c.id) || { ...blank(), name: c.name, side: c.side, cost: Number(c.cost) || 0 }
+    cur.qty += q; cur.gross += price * q; cur.costWt += costPer * q
     byChannel.set(c.id, cur)
   }
 

@@ -391,8 +391,17 @@ body {
 /* 售价/成本：一行 4 列（手机 2 列），输入框收窄 */
 .budget-params { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
 .budget-params .param-item { min-width: 0; }
-.budget-params .param-item input { padding: 8px 9px; font-size: 14px; width: 100%; min-width: 0; }
+.budget-params .param-item input,
+.budget-params .param-item select {
+  padding: 8px 9px; border: 1px solid var(--line); border-radius: 9px;
+  font-size: 14px; width: 100%; min-width: 0; box-sizing: border-box;
+  height: 38px; background: #fafbfc;
+}
 .budget-params .param-label { font-size: 12px; }
+/* 账期：标签与下拉框横向并排，占整行；下拉框与输入框同高 */
+.budget-params .term-item { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 10px; }
+.budget-params .term-item .param-label { flex: 0 0 auto; }
+.budget-params .term-item select { flex: 0 0 160px; height: 38px; }
 
 /* 自动测算行：只读结果格 + 标签 + 年内嵌费率微调 */
 .auto-tag {
@@ -486,6 +495,10 @@ body {
   border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; min-width: 0; flex: 0 0 96px; }
 .calc-row select { flex: 1 1 auto; }
 .calc-name { flex: 1 1 auto !important; }
+/* 渠道成本 % 后缀：输入框 + 常驻 % */
+.calc-pct { flex: 0 0 96px; display: flex; align-items: center; gap: 4px; }
+.calc-pct input { flex: 1 1 auto; }
+.calc-pct em { font-style: normal; font-size: 13px; color: var(--muted); }
 .calc-del { flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--line);
   border-radius: 8px; background: #fff; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .calc-del:hover { border-color: #e5484d; color: #e5484d; }

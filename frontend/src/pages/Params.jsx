@@ -6,6 +6,21 @@ let _uid = 0
 const uid = () => `r${++_uid}`
 const yuan = (n) => (n == null ? '—' : `${fmt(n, 0)} 元`)
 
+// 售价计算器输入持久化到 localStorage（仅本地、不写库）
+const PRICE_KEY = 'params.priceCalc'
+const loadPrice = (fallback) => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PRICE_KEY) || 'null')
+    if (!(saved && saved.packages && saved.channels && saved.lines)) return fallback
+    // 顶过存档已用 id，避免新增行 key 冲突
+    for (const r of [...saved.packages, ...saved.channels, ...saved.lines]) {
+      const n = Number(String(r.id).slice(1))
+      if (n > _uid) _uid = n
+    }
+    return saved
+  } catch { return fallback }
+}
+
 export default function Params({ user, onImport }) {
   const [scenarioId, setScenarioId] = useState(null)
   const [scenarios, setScenarios] = useState([])
@@ -16,10 +31,19 @@ export default function Params({ user, onImport }) {
   const fetchSeq = useRef(0)
   const importFiles = useRef({ main: null, report: null })
 
-  // 平均售价计算器（仅显示，不写库、不重算）
-  const [packages, setPackages] = useState([{ id: uid(), name: '旗舰版', price: '' }])
-  const [channels, setChannels] = useState([{ id: uid(), name: '天猫', side: 'online', cost: '' }])
-  const [lines, setLines] = useState([])
+  // 平均售价计算器（仅显示、不写库；输入持久化到 localStorage）
+  const init = loadPrice({
+    packages: [{ id: uid(), name: '旗舰版', price: '' }],
+    channels: [{ id: uid(), name: '天猫', side: 'online', cost: '' }],
+    lines: [],
+  })
+  const [packages, setPackages] = useState(init.packages)
+  const [channels, setChannels] = useState(init.channels)
+  const [lines, setLines] = useState(init.lines)
+
+  useEffect(() => {
+    try { localStorage.setItem(PRICE_KEY, JSON.stringify({ packages, channels, lines })) } catch { /* 忽略 */ }
+  }, [packages, channels, lines])
 
   const loadGrid = async (id) => {
     const seq = ++fetchSeq.current
@@ -141,7 +165,7 @@ export default function Params({ user, onImport }) {
 
           <section className="card">
             <h2>平均售价计算器</h2>
-            <p className="hint">包装决定定价、渠道决定渠道成本与线上/线下归属；每层净价 = (Σ定价×量 − Σ渠道成本×量) ÷ Σ量。仅显示。</p>
+            <p className="hint">包装决定定价、渠道决定渠道成本（占定价%）与线上/线下归属；每层净价 = (Σ定价×量 − Σ定价×成本%×量) ÷ Σ量。仅显示。</p>
 
             <div className="calc-sub-head">
               <h3>包装定价（元/台）</h3>
@@ -158,7 +182,7 @@ export default function Params({ user, onImport }) {
             ))}
 
             <div className="calc-sub-head">
-              <h3>渠道（渠道成本 元/台）</h3>
+              <h3>渠道（渠道成本 % / 占定价）</h3>
               <button className="link-btn" onClick={() => setChannels((r) => [...r, { id: uid(), name: '', side: 'online', cost: '' }])}>+ 添加渠道</button>
             </div>
             {channels.map((c) => (
@@ -169,8 +193,11 @@ export default function Params({ user, onImport }) {
                   <option value="online">线上</option>
                   <option value="offline">线下</option>
                 </select>
-                <input type="number" placeholder="渠道成本" value={c.cost}
-                  onChange={(e) => setChan(c.id, 'cost', e.target.value)} />
+                <span className="calc-pct">
+                  <input type="number" placeholder="成本" value={c.cost}
+                    onChange={(e) => setChan(c.id, 'cost', e.target.value)} />
+                  <em>%</em>
+                </span>
                 <button className="calc-del" onClick={() => remove(setChannels)(c.id)}>×</button>
               </div>
             ))}

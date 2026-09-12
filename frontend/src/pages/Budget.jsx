@@ -350,7 +350,7 @@ export default function Budget() {
                       onCommit={(v) => setSalesParams((p) => ({ ...p, [f.key]: v }))} />
                   </label>
                 ))}
-                <label className="param-item" key={PURCHASE_TERM_PARAM.key}>
+                <label className="param-item term-item" key={PURCHASE_TERM_PARAM.key}>
                   <span className="param-label">{PURCHASE_TERM_PARAM.label}</span>
                   <select value={salesParams[PURCHASE_TERM_PARAM.key] ?? PURCHASE_TERM_PARAM.default}
                     onChange={(e) => setSalesParams((p) => ({ ...p, [PURCHASE_TERM_PARAM.key]: Number(e.target.value) }))}>
