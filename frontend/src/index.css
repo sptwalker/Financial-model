@@ -469,6 +469,28 @@ body {
 .fin-round-del:hover { border-color: #e5484d; color: #e5484d; }
 .budget-chart { margin-top: 4px; background: rgba(255, 255, 255, 0.6); border-radius: 10px; padding: 4px 2px; }
 
+/* ---------- 参数页计算器（仅显示） ---------- */
+.calc-out-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.calc-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.6); border-radius: 10px; }
+.calc-stat-label { font-size: 12px; color: var(--muted); }
+.calc-stat b { font-size: 16px; }
+.calc-stat--big { grid-column: 1 / -1; background: var(--blue); }
+.calc-stat--big .calc-stat-label { color: rgba(255, 255, 255, 0.85); }
+.calc-stat--big b { color: #fff; font-size: 22px; }
+.calc-sub-head { display: flex; align-items: center; justify-content: space-between;
+  margin: 14px 0 6px; }
+.calc-sub-head h3 { font-size: 14px; margin: 0; }
+.calc-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.calc-row input, .calc-row select { height: 32px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; min-width: 0; flex: 0 0 96px; }
+.calc-row select { flex: 1 1 auto; }
+.calc-name { flex: 1 1 auto !important; }
+.calc-del { flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.calc-del:hover { border-color: #e5484d; color: #e5484d; }
+@media (min-width: 640px) { .calc-out-grid { grid-template-columns: repeat(3, 1fr); } }
+
 @media (min-width: 640px) {
   .budget-params { grid-template-columns: repeat(4, 1fr); }
 }

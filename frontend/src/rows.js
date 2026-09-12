@@ -135,6 +135,12 @@ export const BUDGET_RATE_PARAMS = [
 // 营销自动测算行（预算页只读展示，值随费率/销量实时算出）
 export const AUTO_MKT_KEYS = ['exp.channel_commission', 'exp.channel_promo', 'exp.online_promo']
 
+// 采购付款账期（天）：预算页下拉配置，15 天一档，默认 60（≈N+2）
+export const PURCHASE_TERM_PARAM = {
+  key: 'purchase_term_days', label: '采购付款账期（天）', hint: '默认 60 天（≈N+2），15 天一档',
+  options: [15, 30, 45, 60, 75, 90, 105, 120], default: 60,
+}
+
 export function rowInfo(key) {
   for (const g of ROW_GROUPS) {
     const r = g.rows.find((x) => x.key === key)
@@ -156,8 +162,7 @@ export const PARAM_FIELDS = [
   { key: 'valueadd_ratio', label: '增值付费占比', step: '0.01', hint: '累计装机 × 占比 × 增值单价 ÷12' },
   { key: 'valueadd_revenue_per_unit', label: '单台增值收益（元/年，0=关闭）', step: '1' },
   { key: 'channel_commission_rate', label: '渠道佣金费率', step: '0.001', hint: '= 线下销售 × 费率' },
-  { key: 'purchase_term_days', label: '采购付款账期（天）', hint: '默认 60 天（≈N+2），15 天一档',
-    options: [15, 30, 45, 60, 75, 90, 105, 120], default: 60 },
+  PURCHASE_TERM_PARAM,
 ]
 
 export const CASH_COLORS = {

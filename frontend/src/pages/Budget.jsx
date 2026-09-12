@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc } from '../api'
-import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS, BUDGET_RATE_PARAMS, AUTO_MKT_KEYS } from '../rows'
+import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS, BUDGET_RATE_PARAMS, AUTO_MKT_KEYS, PURCHASE_TERM_PARAM } from '../rows'
 import { roundsToInput, migrateRounds } from '../financing'
 
 const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
 const AUTO_MKT = new Set(AUTO_MKT_KEYS)                     // 营销自动测算行（只读）
-const PARAM_FIELDS = [...BUDGET_SALES_PARAMS, ...BUDGET_RATE_PARAMS]
+const PARAM_FIELDS = [...BUDGET_SALES_PARAMS, ...BUDGET_RATE_PARAMS, PURCHASE_TERM_PARAM]
 const RATE_KEYS = new Set(BUDGET_RATE_PARAMS.map((f) => f.key))
 // 自动测算行 → 该年份费率键（渠道佣金/推广费各年同率；线上推广按年 2026/2027/2028）
 const rateKeyFor = (rowKey, year) => {
@@ -94,6 +94,7 @@ export default function Budget() {
       const sp = {}
       for (const f of BUDGET_SALES_PARAMS) if (params?.[f.key] != null) sp[f.key] = params[f.key]
       for (const f of BUDGET_RATE_PARAMS) sp[f.key] = String(params?.[f.key] ?? f.def)
+      sp[PURCHASE_TERM_PARAM.key] = Number(params?.[PURCHASE_TERM_PARAM.key] ?? PURCHASE_TERM_PARAM.default)
       setBaseParams(sp)
       // 恢复草稿：切页/试算往返保留当前输入；无草稿则回落基线（费率默认补齐旧草稿缺失键）
       const draft = loadDraft()
@@ -349,6 +350,13 @@ export default function Budget() {
                       onCommit={(v) => setSalesParams((p) => ({ ...p, [f.key]: v }))} />
                   </label>
                 ))}
+                <label className="param-item" key={PURCHASE_TERM_PARAM.key}>
+                  <span className="param-label">{PURCHASE_TERM_PARAM.label}</span>
+                  <select value={salesParams[PURCHASE_TERM_PARAM.key] ?? PURCHASE_TERM_PARAM.default}
+                    onChange={(e) => setSalesParams((p) => ({ ...p, [PURCHASE_TERM_PARAM.key]: Number(e.target.value) }))}>
+                    {PURCHASE_TERM_PARAM.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </label>
               </div>
             )}
             note="2028 销量由年度目标驱动，逐月编辑可能被目标覆盖；乐观/悲观按销量整体 ±20%。" />

@@ -1,31 +1,33 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { getVersions, listScenarios, recalc, importRebuild } from '../api'
-import { PARAM_FIELDS } from '../rows'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { getGrid, gridPeriods, listScenarios, importRebuild, fmt } from '../api'
+import { avgCost, priceAverages } from '../calc'
+
+let _uid = 0
+const uid = () => `r${++_uid}`
+const yuan = (n) => (n == null ? '—' : `${fmt(n, 0)} 元`)
 
 export default function Params({ user, onImport }) {
   const [scenarioId, setScenarioId] = useState(null)
   const [scenarios, setScenarios] = useState([])
-  const [params, setParams] = useState(null)
-  const [versionNo, setVersionNo] = useState(null)
-  const [msg, setMsg] = useState(null)
-  const [busy, setBusy] = useState(false)
+  const [grid, setGrid] = useState(null)
+  const [ready, setReady] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const [importing, setImporting] = useState(false)
-  const [ready, setReady] = useState(false)   // 首次情景拉取是否完成（区分「加载中」与「空库」）
   const fetchSeq = useRef(0)
   const importFiles = useRef({ main: null, report: null })
 
-  // 切换情景时重新拉取该情景的参数快照与版本列表（防过期响应覆盖）
-  const loadVersions = async (id) => {
+  // 平均售价计算器（仅显示，不写库、不重算）
+  const [packages, setPackages] = useState([{ id: uid(), name: '旗舰版', price: '' }])
+  const [channels, setChannels] = useState([{ id: uid(), name: '天猫', side: 'online', cost: '' }])
+  const [lines, setLines] = useState([])
+
+  const loadGrid = async (id) => {
     const seq = ++fetchSeq.current
     try {
-      const { versions, params: p } = await getVersions(id)
-      if (seq !== fetchSeq.current) return // 过期响应丢弃
-      const latest = versions[0]
-      setVersionNo(latest ? latest.version_no : null)
-      setParams(latest ? p || {} : null)
+      const g = await getGrid(id)
+      if (seq === fetchSeq.current) setGrid(g)
     } catch (e) {
-      if (seq === fetchSeq.current) setMsg(String(e.response?.data?.detail || e.message))
+      if (seq === fetchSeq.current) setImportMsg(String(e.response?.data?.detail || e.message))
     }
   }
 
@@ -36,51 +38,25 @@ export default function Params({ user, onImport }) {
         setScenarios(scs)
         const active = scs.find((s) => s.is_active) || scs[0]
         setScenarioId(active ? active.id : null)
-      } catch (e) {
-        setMsg(String(e.response?.data?.detail || e.message))
-      } finally {
-        setReady(true)
-      }
+      } catch (e) { setImportMsg(String(e.response?.data?.detail || e.message)) }
+      finally { setReady(true) }
     })()
   }, [])
 
-  // 情景切换 / 重算后：同步该情景的参数与版本
   useEffect(() => {
-    if (scenarioId != null) loadVersions(scenarioId)
+    if (scenarioId != null) loadGrid(scenarioId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarioId])
 
-  const setField = (key, val) => setParams((prev) => ({ ...prev, [key]: val }))
+  const periods = useMemo(() => gridPeriods(grid), [grid])
+  const cost = useMemo(() => avgCost(grid, periods), [grid, periods])
+  const price = useMemo(() => priceAverages(packages, channels, lines), [packages, channels, lines])
 
-  const doRecalc = async () => {
-    try {
-      setBusy(true)
-      setMsg('计算中…')
-      const r = await recalc(scenarioId, { comment: '参数页调整后重算', params })
-      setMsg(`已生成 v${r.version_no}（共 ${r.cell_count} 个单元格）`)
-      await loadVersions(scenarioId) // 刷新版本列表与最新版本号
-    } catch (e) {
-      setMsg('重算失败：' + String(e.response?.data?.detail || e.message))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const resetDefaults = () => {
-    // 恢复引擎默认参数：重新拉取版本快照不可行（快照已是默认），直接前端内置一份
-    setParams({
-      price_online: '1799',
-      price_offline: '1475.18',
-      cost_main: '1150',
-      cost_accessory: '60',
-      acc_ratio: '0.5',
-      acc_revenue_per_unit: '200',
-      sub_ratio: '0.7',
-      sub_revenue_per_unit: '200',
-      channel_commission_rate: '0.05',
-      purchase_term_days: 60,
-    })
-  }
+  // 列表通用增删改：patch 合并到指定 id 的行
+  const patch = (setter) => (id, key, val) =>
+    setter((rows) => rows.map((r) => (r.id === id ? { ...r, [key]: val } : r)))
+  const remove = (setter) => (id) => setter((rows) => rows.filter((r) => r.id !== id))
+  const setPkg = patch(setPackages), setChan = patch(setChannels), setLine = patch(setLines)
 
   const setImportFile = (key) => (e) => {
     importFiles.current[key] = e.target.files?.[0] || null
@@ -100,8 +76,7 @@ export default function Params({ user, onImport }) {
       const r = await importRebuild({ main, report })
       setImportMsg(`重建完成：${r.periods[0]}..${r.periods[1]}（${r.period_count} 期，${r.cells} 单元格）` +
                    `${r.clones.length ? `；已克隆 → ${r.clones.map((c) => c.name).join('、')}` : '；未新增克隆'}`)
-      importFiles.current = { main: null, payroll: null, report: null }
-      // 刷新情景列表与当前版本快照；跳回看板展示新数据
+      importFiles.current = { main: null, report: null }
       const scs = await listScenarios()
       setScenarios(scs)
       const active = scs.find((s) => s.is_active) || scs[0]
@@ -117,14 +92,13 @@ export default function Params({ user, onImport }) {
   return (
     <div className="page">
       <header className="app-header">
-        <h1>参数与重算</h1>
+        <h1>参数计算器</h1>
         <div className="scenario-bar">
           <select value={scenarioId ?? ''} onChange={(e) => setScenarioId(Number(e.target.value))}>
             {scenarios.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <span className="version-chip">当前版本 v{versionNo ?? '-'}</span>
         </div>
       </header>
 
@@ -149,47 +123,104 @@ export default function Params({ user, onImport }) {
         </section>
       )}
 
-      {msg && <div className="recalc-msg">{msg}</div>}
-
-      {!params ? (
-        ready && scenarios.length === 0
-          ? <div className="empty-hint">{user && user.role !== 'viewer'
-              ? <>暂无基础数据，请用上方<b>「导入表格·重建基础数据」</b>上传三张表格重建后再使用。</>
-              : <>暂无基础数据，请联系管理员导入表格重建。</>}</div>
-          : <div className="loading">加载中…</div>
-      ) : (
+      {!ready ? <div className="loading">加载中…</div> : (
         <>
           <section className="card">
-            <h2>计算参数</h2>
-            <p className="hint">修改后点击底部“重算”，生成新版本；不影响历史版本。</p>
-            <div className="param-list">
-              {PARAM_FIELDS.map((f) => (
-                <label className="param-item" key={f.key}>
-                  <span className="param-label">
-                    {f.label}
-                    {f.hint && <em>{f.hint}</em>}
-                  </span>
-                  {f.options
-                    ? <select value={params[f.key] ?? f.default ?? f.options[0]}
-                        onChange={(e) => setField(f.key, Number(e.target.value))}>
-                        {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    : <input type="number" step={f.step}
-                        value={params[f.key] ?? ''}
-                        onChange={(e) => setField(f.key, e.target.value)} />}
-                </label>
-              ))}
+            <h2>平均成本计算器</h2>
+            <p className="hint">按当前情景全期合计：(研发 + 运营 + 采购 + 推广) ÷ 总销量，得每台平均成本。仅显示，不写库。</p>
+            <div className="calc-out-grid">
+              <Stat label="研发（万元）" val={fmt(cost.rd, 0)} />
+              <Stat label="运营管理（万元）" val={fmt(cost.ops, 0)} />
+              <Stat label="推广/营销（万元）" val={fmt(cost.promo, 0)} />
+              <Stat label="采购付款（万元）" val={fmt(cost.purchase, 0)} />
+              <Stat label="总销量（万台）" val={fmt(cost.qty, 1)} />
+              <Stat label="成本合计（万元）" val={fmt(cost.totalCost, 0)} />
+              <Stat label="平均成本" val={yuan(cost.avg)} big />
             </div>
           </section>
 
-          <div className="action-row">
-            <button className="btn" onClick={resetDefaults}>恢复默认参数</button>
-            <button className="btn primary" onClick={doRecalc} disabled={busy}>
-              {busy ? '重算中…' : '重算'}
-            </button>
-          </div>
+          <section className="card">
+            <h2>平均售价计算器</h2>
+            <p className="hint">包装决定定价、渠道决定渠道成本与线上/线下归属；每层净价 = (Σ定价×量 − Σ渠道成本×量) ÷ Σ量。仅显示。</p>
+
+            <div className="calc-sub-head">
+              <h3>包装定价（元/台）</h3>
+              <button className="link-btn" onClick={() => setPackages((r) => [...r, { id: uid(), name: '', price: '' }])}>+ 添加包装</button>
+            </div>
+            {packages.map((p) => (
+              <div className="calc-row" key={p.id}>
+                <input className="calc-name" placeholder="包装名（如 典藏版）" value={p.name}
+                  onChange={(e) => setPkg(p.id, 'name', e.target.value)} />
+                <input type="number" placeholder="定价" value={p.price}
+                  onChange={(e) => setPkg(p.id, 'price', e.target.value)} />
+                <button className="calc-del" onClick={() => remove(setPackages)(p.id)}>×</button>
+              </div>
+            ))}
+
+            <div className="calc-sub-head">
+              <h3>渠道（渠道成本 元/台）</h3>
+              <button className="link-btn" onClick={() => setChannels((r) => [...r, { id: uid(), name: '', side: 'online', cost: '' }])}>+ 添加渠道</button>
+            </div>
+            {channels.map((c) => (
+              <div className="calc-row" key={c.id}>
+                <input className="calc-name" placeholder="渠道名（如 京东）" value={c.name}
+                  onChange={(e) => setChan(c.id, 'name', e.target.value)} />
+                <select value={c.side} onChange={(e) => setChan(c.id, 'side', e.target.value)}>
+                  <option value="online">线上</option>
+                  <option value="offline">线下</option>
+                </select>
+                <input type="number" placeholder="渠道成本" value={c.cost}
+                  onChange={(e) => setChan(c.id, 'cost', e.target.value)} />
+                <button className="calc-del" onClick={() => remove(setChannels)(c.id)}>×</button>
+              </div>
+            ))}
+
+            <div className="calc-sub-head">
+              <h3>销售明细（渠道 × 包装 × 数量）</h3>
+              <button className="link-btn" onClick={() => setLines((r) => [...r, { id: uid(), channelId: channels[0]?.id ?? '', packageId: packages[0]?.id ?? '', qty: '' }])}>+ 添加明细</button>
+            </div>
+            {lines.map((ln) => (
+              <div className="calc-row" key={ln.id}>
+                <select value={ln.channelId} onChange={(e) => setLine(ln.id, 'channelId', e.target.value)}>
+                  {channels.map((c) => <option key={c.id} value={c.id}>{c.name || '(未命名渠道)'}</option>)}
+                </select>
+                <select value={ln.packageId} onChange={(e) => setLine(ln.id, 'packageId', e.target.value)}>
+                  {packages.map((p) => <option key={p.id} value={p.id}>{p.name || '(未命名包装)'}</option>)}
+                </select>
+                <input type="number" placeholder="数量" value={ln.qty}
+                  onChange={(e) => setLine(ln.id, 'qty', e.target.value)} />
+                <button className="calc-del" onClick={() => remove(setLines)(ln.id)}>×</button>
+              </div>
+            ))}
+
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table className="data-table data-table--full">
+                <thead><tr><th>层级</th><th>销量</th><th>毛均价</th><th>净售价</th></tr></thead>
+                <tbody>
+                  {price.byChannel.map((b) => (
+                    <tr key={b.name + b.side}>
+                      <td className="row-name">{b.name}（{b.side === 'online' ? '线上' : '线下'}）</td>
+                      <td>{fmt(b.qty, 0)}</td><td>{yuan(b.gross)}</td><td>{yuan(b.net)}</td>
+                    </tr>
+                  ))}
+                  <tr><td className="row-name"><b>线上汇总</b></td><td>{fmt(price.online.qty, 0)}</td><td>{yuan(price.online.gross)}</td><td>{yuan(price.online.net)}</td></tr>
+                  <tr><td className="row-name"><b>线下汇总</b></td><td>{fmt(price.offline.qty, 0)}</td><td>{yuan(price.offline.gross)}</td><td>{yuan(price.offline.net)}</td></tr>
+                  <tr><td className="row-name"><b>整体</b></td><td>{fmt(price.overall.qty, 0)}</td><td>{yuan(price.overall.gross)}</td><td>{yuan(price.overall.net)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
+    </div>
+  )
+}
+
+function Stat({ label, val, big }) {
+  return (
+    <div className={`calc-stat${big ? ' calc-stat--big' : ''}`}>
+      <span className="calc-stat-label">{label}</span>
+      <b>{val}</b>
     </div>
   )
 }
