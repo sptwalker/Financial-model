@@ -88,31 +88,32 @@ export default function WhatIf() {
 
   const cashOption = useMemo(() => {
     if (!periods.length) return {}
-    const baseVals = periods.map((p) => Number(base?.cells['cash.closing']?.[p]?.value ?? 0))
     const labels = periods.map((p) => `${p.slice(2, 4)}/${p.slice(5)}`)
-    const series = [{
-      name: '基线', type: 'line', symbol: 'none', color: '#8c8c8c',
-      lineStyle: { width: 1.8 }, data: baseVals,
-    }]
+    const baseVals = periods.map((p) => Number(base?.cells['cash.closing']?.[p]?.value ?? 0))
+    const mk = (data, name, color) => ({
+      name, type: 'line', symbol: 'none', color,
+      lineStyle: { width: 1.8, type: name === '基线' ? 'solid' : 'dashed' }, data,
+    })
+    const series = [mk(baseVals, '基线', '#8c8c8c')]
     if (wif) {
-      // 推演线带第3维=相对基线的差值，交给 visualMap 分段着色：低于基线→红，否则→蓝
       const wifVals = periods.map((p) => Number(wif.cells['cash.closing']?.[p]?.value ?? 0))
-      series.push({
-        name: '推演', type: 'line', symbol: 'none',
-        lineStyle: { width: 1.8, type: 'dashed' },
-        data: labels.map((lb, i) => [lb, wifVals[i], wifVals[i] - baseVals[i]]),
-      })
+      const below = wifVals.map((v, i) => v < baseVals[i])
+      // 蓝色完整推演线 + 红色仅覆盖低于基线的段（前后各扩一点，使穿越段落也转红）
+      const redVals = wifVals.map((v, i) => (below[i] || below[i - 1] || below[i + 1]) ? v : null)
+      series.push(mk(wifVals, '推演', '#4f8cff'))
+      series.push({ ...mk(redVals, '推演·低于基线', '#e5484d'), z: 5 })
     }
     return {
-      tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 0) },
-      legend: { bottom: 0, textStyle: { fontSize: 11 } },
-      grid: { left: 48, right: 10, top: 12, bottom: 34, containLabel: true },
-      ...(wif ? {
-        visualMap: {
-          show: false, seriesIndex: 1, dimension: 2,
-          pieces: [{ lt: 0, color: '#e5484d' }, { gte: 0, color: '#4f8cff' }],
+      tooltip: {
+        trigger: 'axis',
+        formatter: (ps) => {
+          const rows = ps.filter((p) => p.seriesName === '基线' || p.seriesName === '推演')
+          if (!rows.length) return ''
+          return `${rows[0].axisValue}<br/>${rows.map((p) => `${p.marker}${p.seriesName}: ${fmt(p.value, 0)}`).join('<br/>')}`
         },
-      } : {}),
+      },
+      legend: { bottom: 0, textStyle: { fontSize: 11 }, data: ['基线', '推演'] },
+      grid: { left: 48, right: 10, top: 12, bottom: 34, containLabel: true },
       xAxis: { type: 'category', data: labels, axisLabel: { fontSize: 9, interval: 5 } },
       yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eee' } } },
       series,
