@@ -455,14 +455,18 @@ body {
 .budget-strip--wide .edit-cell { width: auto; flex: 1; min-width: 92px; }
 .budget-strip--wide .edit-cell input { min-width: 0; width: 100%; }
 
-/* 投融资：三年一排，紧凑不拉伸 */
-.fin-year-row { display: flex; flex-wrap: wrap; gap: 10px 16px; }
-.fin-year { display: flex; align-items: center; gap: 6px; }
-.fin-year-label { font-size: 13px; font-weight: 500; color: var(--muted); }
-.fin-year input { width: 88px; height: 32px; padding: 6px 8px; border: 1px solid var(--line);
-  border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; }
-.fin-year select { width: 68px; height: 32px; padding: 6px 6px; border: 1px solid var(--line);
-  border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; }
+/* 投融资：自定义多轮，每行 名称 / 月份 / 金额 / 删除 */
+.fin-rounds { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.fin-round { display: flex; align-items: center; gap: 8px; }
+.fin-round input, .fin-round select { height: 32px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; min-width: 0; }
+.fin-round-name { flex: 1 1 auto; }
+.fin-round select { flex: 0 0 84px; }
+.fin-round > input:not(.fin-round-name) { flex: 0 0 96px; }
+.fin-round-del { flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; color: var(--muted); font-size: 18px; line-height: 1;
+  cursor: pointer; }
+.fin-round-del:hover { border-color: #e5484d; color: #e5484d; }
 .budget-chart { margin-top: 4px; background: rgba(255, 255, 255, 0.6); border-radius: 10px; padding: 4px 2px; }
 
 @media (min-width: 640px) {

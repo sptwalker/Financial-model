@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Chart from '../components/Chart'
 import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc, recalc } from '../api'
 import { BUDGET_COST_GROUPS, BUDGET_SALES_QTY, BUDGET_SALES_PARAMS, BUDGET_RATE_PARAMS, AUTO_MKT_KEYS } from '../rows'
+import { roundsToInput, migrateRounds } from '../financing'
 
 const r2 = (n) => Math.round(n * 100) / 100                // 统一最多两位小数
 const AUTO_MKT = new Set(AUTO_MKT_KEYS)                     // 营销自动测算行（只读）
@@ -72,6 +73,7 @@ export default function Budget() {
   const [salesParams, setSalesParams] = useState({})
   const [baseParams, setBaseParams] = useState({})
   const [edits, setEdits] = useState({})              // {row: {period: str}} 中性基准输入覆盖（月度）
+  const [finRounds, setFinRounds] = useState([])      // 投融资轮次 [{name, period, amount}]，UI 真值
   const [preview, setPreview] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -97,6 +99,8 @@ export default function Budget() {
       const draft = loadDraft()
       setSalesParams(draft?.salesParams ? { ...sp, ...draft.salesParams } : sp)
       setEdits(draft?.edits ?? {})
+      // 轮次真值优先级：草稿 → 快照 params.financing_rounds → 从旧网格迁移
+      setFinRounds(draft?.finRounds ?? params?.financing_rounds ?? migrateRounds(g))
       setFactor(draft?.factor ?? 1)
       setSaveName(draft?.saveName ?? defaultName((vno ?? 0) + 1))
       setPreview(null)
@@ -154,8 +158,14 @@ export default function Budget() {
     if (fac !== 1) changed.qty_scale = fac
     return Object.keys(changed).length ? changed : undefined
   }
-  // 送引擎的参数：始终开启营销自动测算（佣金/推广费=销售额×费率）
-  const enginePayload = (fac = 1) => ({ ...(paramsPayload(fac) || {}), auto_marketing: true })
+  // 送引擎的参数：始终开启营销自动测算（佣金/推广费=销售额×费率）；带上轮次元数据供存档/图表标注
+  const enginePayload = (fac = 1) => {
+    const rounds = finRounds.filter((r) => r.period && Math.round(Number(r.amount) || 0))
+    return {
+      ...(paramsPayload(fac) || {}), auto_marketing: true,
+      ...(rounds.length ? { financing_rounds: rounds } : {}),
+    }
+  }
   // 自动测算行的展示值：优先实时预览，回落基线网格
   const compIn = (row, p) =>
     preview?.cells?.[row]?.[p]?.value ?? baseGrid?.cells?.[row]?.[p]?.value ?? '0'
@@ -176,6 +186,32 @@ export default function Budget() {
   }
 
   const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
+
+  // 轮次是真值：派生逐期注入写入 edits[cash.financing]，供引擎与实时预览消费。
+  // 需把基线里有值但轮次已删除的月份显式清零；与基线完全一致时移除该键（不产生 dirty）。
+  useEffect(() => {
+    if (!baseGrid) return
+    const base = baseGrid.cells?.[FINANCING] || {}
+    const row = { ...roundsToInput(finRounds) }
+    for (const p of Object.keys(base)) {
+      if (!(p in row) && Number(base[p]?.value || 0)) row[p] = '0'
+    }
+    const same = (a, b) => Number(a || 0) === Number(b || 0)
+    const diffBase = [...new Set([...Object.keys(row), ...Object.keys(base)])]
+      .some((p) => !same(row[p], base[p]?.value))
+    setEdits((prev) => {
+      if (!diffBase) {
+        if (!(FINANCING in prev)) return prev
+        const { [FINANCING]: _drop, ...rest } = prev
+        return rest
+      }
+      const pr = prev[FINANCING]
+      if (pr && Object.keys(pr).length === Object.keys(row).length
+        && Object.keys(row).every((p) => same(pr[p], row[p]))) return prev
+      return { ...prev, [FINANCING]: row }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finRounds, baseGrid])
 
   // 营销自动测算下，展示值始终来自引擎预览（区别于基线存档）→ 恒预览；防抖 400ms（不建版本）
   // 用 seq 守卫丢弃过期响应：连续编辑时后发的预览可能先返回，否则会被旧结果覆盖
@@ -201,8 +237,8 @@ export default function Budget() {
   // 持久化编辑草稿（切页/试算往返不丢失）；加载完成后才写，避免初始空态覆盖草稿
   useEffect(() => {
     if (!baseGrid) return
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ edits, salesParams, factor, saveName }))
-  }, [edits, salesParams, factor, saveName, baseGrid])
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ edits, salesParams, factor, saveName, finRounds }))
+  }, [edits, salesParams, factor, saveName, baseGrid, finRounds])
 
   const metrics = useMemo(() => {
     const cells = preview?.cells || baseGrid?.cells
@@ -326,7 +362,7 @@ export default function Budget() {
             note="渠道佣金/推广费＝线下销售额×费率，线上推广费＝线上销售额×分年费率；系数在各年金额下方微调（渠道费率各年一致），随销量与费率自动测算（灰底为只读结果）。" />
           <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
             periods={periods} effIn={effIn} setGroup={setGroup} edits={edits} />
-          <FinancingSection periods={periods} effIn={effIn} setEdits={setEdits} baseGrid={baseGrid} />
+          <FinancingSection periods={periods} rounds={finRounds} setRounds={setFinRounds} />
 
           <div className="action-row">
             <span className="hint">{dirty ? '已改动，指标为实时预览；试算看看板，保存才落版本' : factor !== 1 ? '当前为方案预览' : '未改动'}</span>
@@ -387,82 +423,56 @@ function NumInput({ value, placeholder = '0', onCommit }) {
   )
 }
 
-// 投融资：按年录入，每年指定一个到账月份（默认 12 月），一次性注入不摊分
-function FinancingSection({ periods, effIn, setEdits, baseGrid }) {
-  const years = useMemo(() => {
-    const m = {}
-    for (const p of periods) {
-      const [y, mo] = p.split('-')
-      ;(m[y] = m[y] || []).push(mo)
+// 投融资：自定义多轮，每轮自定义名称/到账月份/金额，一次性注入不摊分。
+// 名称+金额随 params.financing_rounds 存档，标注在看板现金流图的紫色虚线上。
+function FinancingSection({ periods, rounds, setRounds }) {
+  const setRound = (i, patch) =>
+    setRounds((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const addRound = () =>
+    setRounds((rs) => [...rs, { name: `第${rs.length + 1}轮`, period: periods[0] || '', amount: '' }])
+  const removeRound = (i) => setRounds((rs) => rs.filter((_, j) => j !== i))
+
+  const option = useMemo(() => {
+    const byPeriod = roundsToInput(rounds)
+    const labels = periods.map((p) => `${p.slice(2, 4)}/${p.slice(5)}`)
+    return {
+      tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 0) },
+      grid: { left: 40, right: 8, top: 10, bottom: 8, containLabel: true },
+      xAxis: { type: 'category', data: labels, axisLabel: { fontSize: 9, interval: 5 } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eef1f6' } } },
+      series: [{
+        name: '到账融资款', type: 'bar', itemStyle: { color: '#9254de' },
+        data: periods.map((p) => Number(byPeriod[p] || 0)),
+      }],
     }
-    return Object.entries(m).map(([y, months]) => ({ y, months }))
-  }, [periods])
-
-  const [monthByYear, setMonthByYear] = useState({})
-
-  const yearAmount = (y, months) =>
-    months.reduce((a, mo) => a + Number(effIn(FINANCING, `${y}-${mo}`) || 0), 0)
-
-  // 写入某年：所选月=整额，其余月清零（不摊分，往返无损）
-  const setFin = (y, months, month, amount) => {
-    const total = String(Math.round(Number(amount || 0)))
-    setEdits((prev) => {
-      const next = { ...prev, [FINANCING]: { ...(prev[FINANCING] || {}) } }
-      for (const mo of months) next[FINANCING][`${y}-${mo}`] = mo === month ? total : '0'
-      return next
-    })
-  }
-
-  // 各年到账月份统一默认 12 月；不落在 12 月的历史数据（摊分或其它月）收敛到 12 月并标为已改动
-  useEffect(() => {
-    if (!baseGrid) return
-    const init = {}
-    const toDec = []
-    for (const { y, months } of years) {
-      init[y] = '12'
-      const nz = months.filter((mo) => Number(effIn(FINANCING, `${y}-${mo}`) || 0) !== 0)
-      const amt = yearAmount(y, months)
-      if (amt !== 0 && !(nz.length === 1 && nz[0] === '12')) toDec.push({ y, months, amt })
-    }
-    setMonthByYear(init)
-    for (const { y, months, amt } of toDec) setFin(y, months, '12', amt)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years, baseGrid])
-
-  const option = useMemo(() => ({
-    tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 0) },
-    grid: { left: 40, right: 8, top: 10, bottom: 8, containLabel: true },
-    xAxis: { type: 'category', data: years.map((g) => `${g.y.slice(2)}年`), axisLabel: { fontSize: 9 } },
-    yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eef1f6' } } },
-    series: [{
-      name: '到账融资款', type: 'bar', itemStyle: { color: '#9254de' },
-      data: years.map((g) => Math.round(yearAmount(g.y, g.months))),
-    }],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [years, baseGrid, monthByYear, effIn])
+  }, [rounds, periods])
 
   return (
     <section className="card budget-sec budget-sec--fin">
-      <div className="budget-sec-head"><h2>投融资（万元）</h2></div>
-      <div className="fin-year-row">
-        {years.map(({ y, months }) => (
-          <div className="fin-year" key={y}>
-            <span className="fin-year-label">{y}年</span>
-            <NumInput value={Math.round(yearAmount(y, months)) || ''} placeholder="金额"
-              onCommit={(v) => setFin(y, months, monthByYear[y] || '12', v)} />
-            <select value={monthByYear[y] || '12'}
-              onChange={(e) => {
-                setMonthByYear((m) => ({ ...m, [y]: e.target.value }))
-                setFin(y, months, e.target.value, yearAmount(y, months))
-              }}>
-              {months.map((mo) => <option key={mo} value={mo}>{Number(mo)}月</option>)}
+      <div className="budget-sec-head">
+        <h2>投融资（万元）</h2>
+        <button className="link-btn" onClick={addRound}>+ 新增轮次</button>
+      </div>
+      <div className="fin-rounds">
+        {rounds.length === 0 && <p className="hint" style={{ margin: 0 }}>暂无融资轮次，点击「+ 新增轮次」添加。</p>}
+        {rounds.map((r, i) => (
+          <div className="fin-round" key={i}>
+            <input className="fin-round-name" type="text" placeholder="轮次名称"
+              value={r.name ?? ''} onChange={(e) => setRound(i, { name: e.target.value })} />
+            <select value={r.period || ''} onChange={(e) => setRound(i, { period: e.target.value })}>
+              {periods.map((p) => (
+                <option key={p} value={p}>{`${p.slice(2, 4)}/${p.slice(5)}`}</option>
+              ))}
             </select>
+            <NumInput value={r.amount ?? ''} placeholder="金额"
+              onCommit={(v) => setRound(i, { amount: v })} />
+            <button className="fin-round-del" title="删除" onClick={() => removeRound(i)}>×</button>
           </div>
         ))}
       </div>
       <div className="budget-chart"><Chart option={option} height={160} /></div>
       <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
-        每年融资款在指定月份一次性注入现金（默认 12 月），不做年度摊分。
+        每轮融资在指定月份一次性注入现金，不做摊分；名称与金额会标注在看板现金流图的融资虚线上。
       </p>
     </section>
   )

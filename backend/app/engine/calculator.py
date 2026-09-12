@@ -135,6 +135,9 @@ class Params:
     install_base_initial: Decimal = Decimal("0")
     # 情景销量系数（中性 1 / 乐观 1.2 / 悲观 0.8）：对最终销量整体缩放
     qty_scale: Decimal = Decimal("1")
+    # 投融资轮次元数据 [{name, period, amount}]：引擎不读（现金注入走 cash.financing 输入行），
+    # 仅随快照存档，供图表标注轮次名称。见 frontend/src/financing.js
+    financing_rounds: list = field(default_factory=list)
 
 
 def _d(x) -> Decimal:

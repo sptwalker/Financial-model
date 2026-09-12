@@ -5,6 +5,7 @@ import { fmt, getGrid, getVersions, gridPeriods, listScenarios, previewRecalc,
 import { ROW_GROUPS, BUDGET_COST_GROUPS, rowInfo, CASH_COLORS } from '../rows'
 import { cellDelta } from '../diff'
 import { detectAlerts, summarizeAlerts } from '../alerts'
+import { roundLabels } from '../financing'
 import { TRIAL_KEY } from './Budget'
 
 const r2 = (n) => Math.round(n * 100) / 100
@@ -52,6 +53,8 @@ export default function Dashboard({ user, onLogout }) {
   const [cmpVersionNo, setCmpVersionNo] = useState(null)  // 复盘对比版本（null=不对比）
   const [cmpGrid, setCmpGrid] = useState(null)
   const [grid, setGrid] = useState(null)
+  const [verParams, setVerParams] = useState(null)  // 当前版本快照参数（含 financing_rounds）
+  const [finRounds, setFinRounds] = useState([])   // 融资轮次元数据，供现金流图虚线标注名称
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [recalcMsg, setRecalcMsg] = useState(null)
@@ -77,8 +80,9 @@ export default function Dashboard({ user, onLogout }) {
           return
         }
         setScenarioId(active.id)
-        const { versions: vs } = await getVersions(active.id)
+        const { versions: vs, params } = await getVersions(active.id)
         setVersions(vs)
+        setVerParams(params || null)
         if (vs.length) setVersionNo(vs[0].version_no)
       } catch (e) {
         setError(String(e.response?.data?.detail || e.message))
@@ -97,6 +101,8 @@ export default function Dashboard({ user, onLogout }) {
       const t = JSON.parse(localStorage.getItem(TRIAL_KEY) || 'null')
       tp = t?.scenarios?.[scenarioId] || null
     } catch { tp = null }
+    // 融资轮次名称：试算优先取本地 payload，否则取版本快照参数
+    setFinRounds(tp?.params?.financing_rounds || verParams?.financing_rounds || [])
     const req = tp
       ? previewRecalc(scenarioId, tp).then((r) => ({ scenario_id: scenarioId, version_no: versionNo, cells: r.cells }))
       : getGrid(scenarioId, versionNo)
@@ -105,7 +111,7 @@ export default function Dashboard({ user, onLogout }) {
       .catch((e) => !stale && setError(String(e.response?.data?.detail || e.message)))
       .finally(() => !stale && setLoading(false))
     return () => { stale = true }
-  }, [scenarioId, versionNo, nonce])
+  }, [scenarioId, versionNo, nonce, verParams])
 
   // 复盘对比版本的网格（只读快照，不受试算影响）
   useEffect(() => {
@@ -182,14 +188,18 @@ export default function Dashboard({ user, onLogout }) {
       lineStyle: dash ? { width: 1.5, type: 'dashed' } : { width: 1.5 },
       data: periods.map((p) => Number(grid.cells[key]?.[p]?.value ?? 0)),
     })
-    // 融资款注入点：在现金流水图上标竖线 + 金额
+    // 融资款注入点：在现金流水图上标竖线 + 名称/金额（名称取自 financing_rounds）
     const finRow = grid.cells['cash.financing'] || {}
+    const labelByPeriod = roundLabels(finRounds)
     const finMarks = periods
       .map((p, i) => ({ p, i, v: Number(finRow[p]?.value ?? 0) }))
       .filter((m) => m.v > 0)
       .map((m) => ({
         xAxis: labels[m.i],
-        label: { formatter: `融资 ${fmt(m.v, 0)}万`, fontSize: 9, color: '#9254de', position: 'insideEndTop' },
+        label: {
+          formatter: labelByPeriod[m.p] || `融资 ${fmt(m.v, 0)}万`,
+          fontSize: 9, color: '#9254de', position: 'insideEndTop',
+        },
       }))
     return {
       tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 2) },
@@ -214,7 +224,7 @@ export default function Dashboard({ user, onLogout }) {
         },
       ],
     }
-  }, [grid, periods])
+  }, [grid, periods, finRounds])
 
   // 成本构成/桑基图：年份列表与当前年
   const years = useMemo(() => [...new Set(periods.map((p) => p.slice(0, 4)))], [periods])
@@ -298,9 +308,10 @@ export default function Dashboard({ user, onLogout }) {
     const seq = ++fetchSeq.current
     setScenarioId(id)
     try {
-      const { versions: vs } = await getVersions(id)
+      const { versions: vs, params } = await getVersions(id)
       if (seq !== fetchSeq.current) return // 过期响应丢弃，避免覆盖新情景
       setVersions(vs)
+      setVerParams(params || null)
       setVersionNo(vs.length ? vs[0].version_no : null)
     } catch (e) {
       if (seq === fetchSeq.current) setError(String(e.response?.data?.detail || e.message))
