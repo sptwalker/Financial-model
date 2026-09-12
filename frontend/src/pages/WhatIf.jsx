@@ -129,7 +129,7 @@ export default function WhatIf() {
 
   const rows = [
     { label: '销售收入', k: 'sales' },
-    { label: '总成本', k: 'cost' },
+    { label: '总成本', k: 'cost', higherWorse: true },   // 成本增加=红，减少=绿
     { label: '期末现金', k: 'cashClose' },
     { label: '最深资金缺口', k: 'maxGap' },
     { label: '累计回款', k: 'collect' },
@@ -187,6 +187,8 @@ export default function WhatIf() {
                 const w = wifImpact?.[r.k]
                 const d = (b == null || w == null) ? 0 : w - b
                 const changed = Math.abs(d) >= 0.5
+                // 好=绿(down)/坏=红(up)；成本类升高为坏，故按 higherWorse 反转
+                const good = r.higherWorse ? d < 0 : d > 0
                 return (
                   <tr key={r.k}>
                     <td className="row-name">{r.label}</td>
@@ -194,7 +196,7 @@ export default function WhatIf() {
                     <td>{w == null ? '—' : fmt(w, 0)}</td>
                     <td className={changed ? 'cell-changed' : ''}>
                       {changed
-                        ? <span className={`cell-delta ${d > 0 ? 'down' : 'up'}`}>{d > 0 ? '+' : ''}{fmt(d, 0)}</span>
+                        ? <span className={`cell-delta ${good ? 'down' : 'up'}`}>{d > 0 ? '+' : ''}{fmt(d, 0)}</span>
                         : '—'}
                     </td>
                   </tr>
