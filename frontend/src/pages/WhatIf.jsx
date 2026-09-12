@@ -89,30 +89,37 @@ export default function WhatIf() {
   const cashOption = useMemo(() => {
     if (!periods.length) return {}
     const labels = periods.map((p) => `${p.slice(2, 4)}/${p.slice(5)}`)
-    const baseVals = periods.map((p) => Number(base?.cells['cash.closing']?.[p]?.value ?? 0))
-    const mk = (data, name, color) => ({
+    const valsOf = (g, key) => periods.map((p) => Number(g?.cells[key]?.[p]?.value ?? 0))
+    const baseVals = valsOf(base, 'cash.closing')
+    const mk = (data, name, color, solid = false) => ({
       name, type: 'line', symbol: 'none', color,
-      lineStyle: { width: 1.8, type: name === '基线' ? 'solid' : 'dashed' }, data,
+      lineStyle: { width: 1.8, type: solid ? 'solid' : 'dashed' }, data,
     })
-    const series = [mk(baseVals, '基线', '#8c8c8c')]
+    // 期末现金（基线灰实线）+ 资金缺口（基线黄实线）
+    const series = [
+      mk(baseVals, '基线', '#8c8c8c', true),
+      mk(valsOf(base, 'cash.gap'), '基线缺口', '#f6bd16', true),
+    ]
     if (wif) {
-      const wifVals = periods.map((p) => Number(wif.cells['cash.closing']?.[p]?.value ?? 0))
+      const wifVals = valsOf(wif, 'cash.closing')
       const below = wifVals.map((v, i) => v < baseVals[i])
       // 蓝色完整推演线 + 红色仅覆盖低于基线的段（前后各扩一点，使穿越段落也转红）
       const redVals = wifVals.map((v, i) => (below[i] || below[i - 1] || below[i + 1]) ? v : null)
       series.push(mk(wifVals, '推演', '#4f8cff'))
       series.push({ ...mk(redVals, '推演·低于基线', '#e5484d'), z: 5 })
+      series.push(mk(valsOf(wif, 'cash.gap'), '推演缺口', '#fa8c16'))
     }
+    const legendData = series.map((s) => s.name).filter((n) => n !== '推演·低于基线')
     return {
       tooltip: {
         trigger: 'axis',
         formatter: (ps) => {
-          const rows = ps.filter((p) => p.seriesName === '基线' || p.seriesName === '推演')
+          const rows = ps.filter((p) => p.seriesName !== '推演·低于基线')
           if (!rows.length) return ''
           return `${rows[0].axisValue}<br/>${rows.map((p) => `${p.marker}${p.seriesName}: ${fmt(p.value, 0)}`).join('<br/>')}`
         },
       },
-      legend: { bottom: 0, textStyle: { fontSize: 11 }, data: ['基线', '推演'] },
+      legend: { bottom: 0, textStyle: { fontSize: 11 }, data: legendData },
       grid: { left: 48, right: 10, top: 12, bottom: 34, containLabel: true },
       xAxis: { type: 'category', data: labels, axisLabel: { fontSize: 9, interval: 5 } },
       yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eee' } } },
