@@ -129,8 +129,9 @@ class Params:
     collect_weight_offline: list = field(default_factory=lambda: [Decimal("0"), Decimal("1")])
     collect_weight_sub: list = field(default_factory=lambda: [Decimal("1")])
     collect_weight_valueadd: list = field(default_factory=lambda: [Decimal("1")])
-    # 采购付款账期（N+M）：[0,0,1]=N+2，[0,0,0,1]=N+3（可配置）
-    purchase_lag: int = 2
+    # 采购付款账期（天）：15~120，按 30 天/月折算成月度权重卷积。
+    # 60 天≡N+2（[0,0,1]），与旧 purchase_lag=2 逐月等价，保对账基线。
+    purchase_term_days: int = 60
     # 2026-07 前累计装机量（万台，按现金流量表数值）
     install_base_initial: Decimal = Decimal("0")
     # 情景销量系数（中性 1 / 乐观 1.2 / 悲观 0.8）：对最终销量整体缩放
@@ -177,6 +178,18 @@ def seasonal_weights(periods: list[str], qty_by_period: dict[str, Decimal]) -> d
         weights[year] = [v / total for v in vals] if total > 0 else \
             [Decimal(1) / len(vals)] * len(vals)
     return weights
+
+
+def payment_weights(days: int) -> list[Decimal]:
+    """付款账期（天）→ 月度权重向量（30 天/月线性分摊）。
+    整数月落单点（60→[0,0,1]=N+2）；半月跨两月插值（45→[0,0.5,0.5]）。"""
+    months = Decimal(int(days)) / Decimal(30)
+    lo = int(months)                 # floor（天数非负）
+    frac = months - lo
+    w = [Decimal(0)] * lo + [Decimal(1) - frac]
+    if frac > 0:
+        w.append(frac)
+    return w
 
 
 def monthlyize(annual: Decimal, weights: list[Decimal]) -> list[Decimal]:
@@ -306,16 +319,17 @@ def run(periods: list[str], params: Params,
     sale_total = [a + b + c + d + e for a, b, c, d, e in
                   zip(sale_online, sale_offline, sale_acc, sale_sub, sale_valueadd)]
 
-    # ---------- 3. 采购付款（N+M 账期） ----------
+    # ---------- 3. 采购付款（账期按天折算月度权重卷积） ----------
     buy_main = [q * p.cost_main for q in qty_total]
     buy_acc = [q * p.cost_accessory for q in qty_total]
-    lag = p.purchase_lag
+    w_pay = payment_weights(p.purchase_term_days)
     pur_main = [zero] * n
     pur_acc = [zero] * n
     for i in range(n):
-        if i + lag < n:
-            pur_main[i + lag] += buy_main[i]
-            pur_acc[i + lag] += buy_acc[i]
+        for k, weight in enumerate(w_pay):
+            if i + k < n and weight != 0:
+                pur_main[i + k] += buy_main[i] * weight
+                pur_acc[i + k] += buy_acc[i] * weight
     pur_total = [a + b for a, b in zip(pur_main, pur_acc)]
 
     # ---------- 4. 回款（配件回款跟随销售渠道，与硬件同权重卷积） ----------

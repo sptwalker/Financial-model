@@ -78,7 +78,7 @@ export default function Params({ user, onImport }) {
       sub_ratio: '0.7',
       sub_revenue_per_unit: '200',
       channel_commission_rate: '0.05',
-      purchase_lag: 2,
+      purchase_term_days: 60,
     })
   }
 
@@ -169,9 +169,14 @@ export default function Params({ user, onImport }) {
                     {f.label}
                     {f.hint && <em>{f.hint}</em>}
                   </span>
-                  <input type="number" step={f.step}
-                    value={params[f.key] ?? ''}
-                    onChange={(e) => setField(f.key, e.target.value)} />
+                  {f.options
+                    ? <select value={params[f.key] ?? f.default ?? f.options[0]}
+                        onChange={(e) => setField(f.key, Number(e.target.value))}>
+                        {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    : <input type="number" step={f.step}
+                        value={params[f.key] ?? ''}
+                        onChange={(e) => setField(f.key, e.target.value)} />}
                 </label>
               ))}
             </div>

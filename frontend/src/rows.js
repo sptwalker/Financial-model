@@ -156,7 +156,8 @@ export const PARAM_FIELDS = [
   { key: 'valueadd_ratio', label: '增值付费占比', step: '0.01', hint: '累计装机 × 占比 × 增值单价 ÷12' },
   { key: 'valueadd_revenue_per_unit', label: '单台增值收益（元/年，0=关闭）', step: '1' },
   { key: 'channel_commission_rate', label: '渠道佣金费率', step: '0.001', hint: '= 线下销售 × 费率' },
-  { key: 'purchase_lag', label: '采购付款账期（N+M）', step: '1', hint: '2 = N+2，3 = N+3' },
+  { key: 'purchase_term_days', label: '采购付款账期（天）', hint: '默认 60 天（≈N+2），15 天一档',
+    options: [15, 30, 45, 60, 75, 90, 105, 120], default: 60 },
 ]
 
 export const CASH_COLORS = {

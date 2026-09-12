@@ -34,7 +34,7 @@ def _coerce_decimal(value) -> Decimal:
 
 
 def _coerce_params(data: dict) -> dict:
-    """把参数 dict 的数值字段转 Decimal；list 字段逐元素转（回款权重等）；purchase_lag 保持 int"""
+    """把参数 dict 的数值字段转 Decimal；list 字段逐元素转（回款权重等）；purchase_term_days 保持 int"""
     out = {}
     for k, v in data.items():
         if k == "financing_rounds":
@@ -43,7 +43,7 @@ def _coerce_params(data: dict) -> dict:
             out[k] = [_coerce_decimal(x) for x in v]
         elif isinstance(v, bool):
             out[k] = v
-        elif k == "purchase_lag":
+        elif k == "purchase_term_days":
             out[k] = int(v)
         else:
             out[k] = _coerce_decimal(v)
