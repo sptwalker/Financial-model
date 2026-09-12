@@ -46,13 +46,16 @@ export function buildExpenseInputs(baseGrid, { opexFactor = 1, rdFactor = 1 } = 
   return Object.keys(out).length ? out : null
 }
 
-// 推演关注的三个结果：期末现金、全期最深资金缺口、累计回款
+// 推演关注的结果：期末现金、全期最深资金缺口、累计回款/销售收入/总成本
 export function impactOf(grid, periods) {
   if (!grid || !periods.length) return null
   const at = (key, p) => Number(grid.cells[key]?.[p]?.value ?? 0)
+  const sum = (key) => periods.reduce((a, p) => a + at(key, p), 0)
   return {
     cashClose: at('cash.closing', periods[periods.length - 1]),
     maxGap: periods.reduce((m, p) => Math.min(m, at('cash.gap', p)), 0),
-    collect: periods.reduce((a, p) => a + at('collect.total', p), 0),
+    collect: sum('collect.total'),
+    sales: sum('sale.total.amount'),   // 销售收入合计
+    cost: sum('cash.expense'),         // 总成本 = 采购合计 + 运营费用合计
   }
 }

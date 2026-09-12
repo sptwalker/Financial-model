@@ -88,29 +88,43 @@ export default function WhatIf() {
 
   const cashOption = useMemo(() => {
     if (!periods.length) return {}
-    const line = (grid, name, color, dashed) => ({
-      name, type: 'line', symbol: 'none', color,
-      lineStyle: { width: 1.8, type: dashed ? 'dashed' : 'solid' },
-      data: periods.map((p) => Number(grid?.cells['cash.closing']?.[p]?.value ?? 0)),
-    })
+    const baseVals = periods.map((p) => Number(base?.cells['cash.closing']?.[p]?.value ?? 0))
+    const labels = periods.map((p) => `${p.slice(2, 4)}/${p.slice(5)}`)
+    const series = [{
+      name: '基线', type: 'line', symbol: 'none', color: '#8c8c8c',
+      lineStyle: { width: 1.8 }, data: baseVals,
+    }]
+    if (wif) {
+      // 推演线带第3维=相对基线的差值，交给 visualMap 分段着色：低于基线→红，否则→蓝
+      const wifVals = periods.map((p) => Number(wif.cells['cash.closing']?.[p]?.value ?? 0))
+      series.push({
+        name: '推演', type: 'line', symbol: 'none',
+        lineStyle: { width: 1.8, type: 'dashed' },
+        data: labels.map((lb, i) => [lb, wifVals[i], wifVals[i] - baseVals[i]]),
+      })
+    }
     return {
       tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 0) },
       legend: { bottom: 0, textStyle: { fontSize: 11 } },
       grid: { left: 48, right: 10, top: 12, bottom: 34, containLabel: true },
-      xAxis: { type: 'category', data: periods.map((p) => `${p.slice(2, 4)}/${p.slice(5)}`),
-        axisLabel: { fontSize: 9, interval: 5 } },
+      ...(wif ? {
+        visualMap: {
+          show: false, seriesIndex: 1, dimension: 2,
+          pieces: [{ lt: 0, color: '#e5484d' }, { gte: 0, color: '#4f8cff' }],
+        },
+      } : {}),
+      xAxis: { type: 'category', data: labels, axisLabel: { fontSize: 9, interval: 5 } },
       yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eee' } } },
-      series: [
-        line(base, '基线', '#8c8c8c', false),
-        ...(wif ? [line(wif, '推演', '#4f8cff', true)] : []),
-      ],
+      series,
     }
   }, [base, wif, periods])
 
   const rows = [
-    { label: '期末现金', k: 'cashClose', good: 'up' },
-    { label: '最深资金缺口', k: 'maxGap', good: 'up' },   // 越接近 0 越好
-    { label: '累计回款', k: 'collect', good: 'up' },
+    { label: '销售收入', k: 'sales' },
+    { label: '总成本', k: 'cost' },
+    { label: '期末现金', k: 'cashClose' },
+    { label: '最深资金缺口', k: 'maxGap' },
+    { label: '累计回款', k: 'collect' },
   ]
 
   return (
@@ -157,8 +171,8 @@ export default function WhatIf() {
       <section className="card">
         <h2>结果对比（万元）{wif ? '' : ' · 未改动'}</h2>
         <div className="table-wrap">
-          <table className="data-table">
-            <thead><tr><th>指标</th><th>基线</th><th>推演</th><th>Δ</th></tr></thead>
+          <table className="data-table data-table--full">
+            <thead><tr><th>指标</th><th>基线</th><th>推演</th><th>差值</th></tr></thead>
             <tbody>
               {rows.map((r) => {
                 const b = baseImpact?.[r.k]

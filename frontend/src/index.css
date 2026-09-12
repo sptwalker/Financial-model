@@ -333,6 +333,7 @@ body {
 /* ---------- 全量表格 ---------- */
 .table-wrap { overflow: auto; padding: 8px; -webkit-overflow-scrolling: touch; }
 .data-table { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.data-table--full { width: 100%; }
 .data-table th, .data-table td {
   border: 1px solid var(--line); padding: 5px 8px; text-align: right;
   font-variant-numeric: tabular-nums;

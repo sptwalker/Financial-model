@@ -89,10 +89,14 @@ describe('impactOf', () => {
       'cash.closing': { '2026-10': { value: '320' } },
       'cash.gap': { '2026-08': { value: '-10' }, '2026-09': { value: '-55' }, '2026-10': { value: '0' } },
       'collect.total': { '2026-08': { value: '5' }, '2026-09': { value: '8' }, '2026-10': { value: '12' } },
+      'sale.total.amount': { '2026-08': { value: '20' }, '2026-09': { value: '30' }, '2026-10': { value: '40' } },
+      'cash.expense': { '2026-08': { value: '15' }, '2026-09': { value: '25' }, '2026-10': { value: '35' } },
     },
   }
-  it('提取期末现金/最深缺口/累计回款', () => {
-    expect(impactOf(grid, periods)).toEqual({ cashClose: 320, maxGap: -55, collect: 25 })
+  it('提取期末现金/最深缺口/累计回款/销售收入/总成本', () => {
+    expect(impactOf(grid, periods)).toEqual({
+      cashClose: 320, maxGap: -55, collect: 25, sales: 90, cost: 75,
+    })
   })
   it('空网格返回 null', () => {
     expect(impactOf(null, periods)).toBeNull()
