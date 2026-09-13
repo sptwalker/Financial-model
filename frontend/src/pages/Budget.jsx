@@ -74,6 +74,8 @@ export default function Budget() {
   const [baseParams, setBaseParams] = useState({})
   const [edits, setEdits] = useState({})              // {row: {period: str}} 中性基准输入覆盖（月度）
   const [finRounds, setFinRounds] = useState([])      // 投融资轮次 [{name, period, amount}]，UI 真值
+  const [loans, setLoans] = useState([])              // 贷款 [{name, period, amount, rate, term_months}]，直送引擎 params.loans
+  const [baseLoans, setBaseLoans] = useState('[]')    // 基线贷款快照（JSON）用于 dirty 比对
   const [preview, setPreview] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -102,6 +104,10 @@ export default function Budget() {
       setEdits(draft?.edits ?? {})
       // 轮次真值优先级：草稿 → 快照 params.financing_rounds → 从旧网格迁移
       setFinRounds(draft?.finRounds ?? params?.financing_rounds ?? migrateRounds(g))
+      // 引擎存的是小数年利率，UI 用百分数展示，加载时换算回百分数
+      const uiLoans = (params?.loans ?? []).map((l) => ({ ...l, rate: (Number(l.rate) || 0) * 100 }))
+      setBaseLoans(JSON.stringify(uiLoans))
+      setLoans(draft?.loans ?? uiLoans)
       setFactor(draft?.factor ?? 1)
       setSaveName(draft?.saveName ?? defaultName((vno ?? 0) + 1))
       setPreview(null)
@@ -162,9 +168,12 @@ export default function Budget() {
   // 送引擎的参数：始终开启营销自动测算（佣金/推广费=销售额×费率）；带上轮次元数据供存档/图表标注
   const enginePayload = (fac = 1) => {
     const rounds = finRounds.filter((r) => r.period && Math.round(Number(r.amount) || 0))
+    const lns = loans.filter((l) => l.period && Number(l.amount) > 0 && Number(l.term_months) > 0)
+      .map((l) => ({ ...l, rate: (Number(l.rate) || 0) / 100 }))  // UI 百分数 → 引擎小数年利率
     return {
       ...(paramsPayload(fac) || {}), auto_marketing: true,
       ...(rounds.length ? { financing_rounds: rounds } : {}),
+      ...(lns.length ? { loans: lns } : {}),
     }
   }
   // 自动测算行的展示值：优先实时预览，回落基线网格
@@ -187,6 +196,8 @@ export default function Budget() {
   }
 
   const dirty = Object.keys(edits).length > 0 || paramsPayload() !== undefined
+    || JSON.stringify(loans) !== baseLoans
+    || JSON.stringify(loans) !== baseLoans
 
   // 轮次是真值：派生逐期注入写入 edits[cash.financing]，供引擎与实时预览消费。
   // 需把基线里有值但轮次已删除的月份显式清零；与基线完全一致时移除该键（不产生 dirty）。
@@ -238,8 +249,8 @@ export default function Budget() {
   // 持久化编辑草稿（切页/试算往返不丢失）；加载完成后才写，避免初始空态覆盖草稿
   useEffect(() => {
     if (!baseGrid) return
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ edits, salesParams, factor, saveName, finRounds }))
-  }, [edits, salesParams, factor, saveName, baseGrid, finRounds])
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ edits, salesParams, factor, saveName, finRounds, loans }))
+  }, [edits, salesParams, factor, saveName, baseGrid, finRounds, loans])
 
   const metrics = useMemo(() => {
     const cells = preview?.cells || baseGrid?.cells
@@ -371,6 +382,7 @@ export default function Budget() {
           <Section title="管理预算（万元）" tone="admin" rows={ADMIN}
             periods={periods} effIn={effIn} setGroup={setGroup} edits={edits} />
           <FinancingSection periods={periods} rounds={finRounds} setRounds={setFinRounds} />
+          <LoanSection periods={periods} loans={loans} setLoans={setLoans} preview={preview} />
 
           <div className="action-row">
             <span className="hint">{dirty ? '已改动，指标为实时预览；试算看看板，保存才落版本' : factor !== 1 ? '当前为方案预览' : '未改动'}</span>
@@ -481,6 +493,66 @@ function FinancingSection({ periods, rounds, setRounds }) {
       <div className="budget-chart"><Chart option={option} height={160} /></div>
       <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
         每轮融资在指定月份一次性注入现金，不做摊分；名称与金额会标注在看板现金流图的融资虚线上。
+      </p>
+    </section>
+  )
+}
+
+// 贷款：先息后本。放款月注入现金，每年结息，到期一次性还本；负债余额随快照存档并驱动引擎。
+// UI 收年利率(%)，enginePayload 换算成小数送 params.loans；图表读预览的负债余额行。
+function LoanSection({ periods, loans, setLoans, preview }) {
+  const setLoan = (i, patch) =>
+    setLoans((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
+  const addLoan = () =>
+    setLoans((ls) => [...ls, { name: `贷款${ls.length + 1}`, period: periods[0] || '', amount: '', rate: '', term_months: 12 }])
+  const removeLoan = (i) => setLoans((ls) => ls.filter((_, j) => j !== i))
+
+  const option = useMemo(() => {
+    const bal = preview?.cells?.['loan.balance']
+    const labels = periods.map((p) => `${p.slice(2, 4)}/${p.slice(5)}`)
+    return {
+      tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 0) },
+      grid: { left: 40, right: 8, top: 10, bottom: 8, containLabel: true },
+      xAxis: { type: 'category', data: labels, axisLabel: { fontSize: 9, interval: 5 } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eef1f6' } } },
+      series: [{
+        name: '负债余额', type: 'line', step: 'end', showSymbol: false,
+        areaStyle: { color: 'rgba(245,108,108,0.12)' }, itemStyle: { color: '#f56c6c' },
+        data: periods.map((p) => Number(bal?.[p]?.value || 0)),
+      }],
+    }
+  }, [preview, periods])
+
+  return (
+    <section className="card budget-sec budget-sec--fin">
+      <div className="budget-sec-head">
+        <h2>贷款（万元）</h2>
+        <button className="link-btn" onClick={addLoan}>+ 新增贷款</button>
+      </div>
+      <div className="fin-rounds">
+        {loans.length === 0 && <p className="hint" style={{ margin: 0 }}>暂无贷款，点击「+ 新增贷款」添加。</p>}
+        {loans.map((l, i) => (
+          <div className="fin-round" key={i}>
+            <input className="fin-round-name" type="text" placeholder="贷款名称"
+              value={l.name ?? ''} onChange={(e) => setLoan(i, { name: e.target.value })} />
+            <select value={l.period || ''} onChange={(e) => setLoan(i, { period: e.target.value })}>
+              {periods.map((p) => (
+                <option key={p} value={p}>{`${p.slice(2, 4)}/${p.slice(5)}`}</option>
+              ))}
+            </select>
+            <NumInput value={l.amount ?? ''} placeholder="金额"
+              onCommit={(v) => setLoan(i, { amount: v })} />
+            <NumInput value={l.rate ?? ''} placeholder="年利率%"
+              onCommit={(v) => setLoan(i, { rate: v })} />
+            <NumInput value={l.term_months ?? ''} placeholder="期限(月)"
+              onCommit={(v) => setLoan(i, { term_months: v })} />
+            <button className="fin-round-del" title="删除" onClick={() => removeLoan(i)}>×</button>
+          </div>
+        ))}
+      </div>
+      <div className="budget-chart"><Chart option={option} height={160} /></div>
+      <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+        先息后本：放款月一次性到账注入现金，每满 12 个月结一次利息（金额×年利率），到期月（放款+期限）一次性还本；负债余额为未还本金，还本后归零。
       </p>
     </section>
   )

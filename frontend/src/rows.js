@@ -63,6 +63,15 @@ export const ROW_GROUPS = [
     ],
   },
   {
+    name: '贷款（万元）',
+    rows: [
+      { key: 'loan.principal_in', label: '贷款到账', editable: false },
+      { key: 'loan.interest', label: '利息支出', editable: false },
+      { key: 'loan.repayment', label: '本金偿还', editable: false },
+      { key: 'loan.balance', label: '负债余额', editable: false },
+    ],
+  },
+  {
     name: '现金（万元）',
     rows: [
       { key: 'cash.opening', label: '期初现金', editable: true },

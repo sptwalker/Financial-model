@@ -59,6 +59,12 @@ CASH_GAP = "cash.gap"          # 本期缺口 = 回款 - 支出
 CASH_CLOSE = "cash.closing"
 CASH_FINANCING = "cash.financing"  # 投融资到账款（输入，特定月一次性注入现金，不摊分）
 
+# 贷款（万元）——引擎计算，源自 params.loans。先息后本：到账注入现金、每年末结息、到期还本。
+LOAN_IN = "loan.principal_in"   # 贷款到账（现金流入）
+LOAN_INTEREST = "loan.interest" # 利息支出（每年末结算，现金流出）
+LOAN_REPAY = "loan.repayment"   # 本金偿还（到期一次性，现金流出）
+LOAN_BALANCE = "loan.balance"   # 负债余额（未还本金，到期归零）
+
 # 费用行（万元/月）——全部输入
 EXPENSE_ROWS = [
     "exp.salary",              # 工资
@@ -86,6 +92,7 @@ COMPUTED_ROWS = frozenset({
     PURCHASE_MAIN, PURCHASE_ACC, PURCHASE_TOTAL,
     COLLECT_ONLINE, COLLECT_OFFLINE, COLLECT_SUB, COLLECT_VALUEADD, COLLECT_TOTAL,
     CASH_IN, CASH_EXP, CASH_GAP, CASH_CLOSE, EXPENSE_TOTAL,
+    LOAN_IN, LOAN_INTEREST, LOAN_REPAY, LOAN_BALANCE,
 })
 
 # 输入行全集
@@ -139,6 +146,10 @@ class Params:
     # 投融资轮次元数据 [{name, period, amount}]：引擎不读（现金注入走 cash.financing 输入行），
     # 仅随快照存档，供图表标注轮次名称。见 frontend/src/financing.js
     financing_rounds: list = field(default_factory=list)
+    # 贷款 [{name, amount(万元), period '2027-01', rate(年利率小数), term_months(整数)}]。
+    # 先息后本：放款月现金流入 amount；每年末（每满 12 个月）结息 amount×rate；
+    # 到期月（放款+term_months）一次性还本 amount。负债余额=未还本金。UI 见 Budget.jsx LoanSection
+    loans: list = field(default_factory=list)
 
 
 def _d(x) -> Decimal:
@@ -386,15 +397,44 @@ def run(periods: list[str], params: Params,
             _monthlyize_row(exp_by_row[row], periods, w, target_years, annual_by_year)
     exp_total = [sum(exp_by_row[row][i] for row in EXPENSE_ROWS) for i in range(n)]
 
-    # ---------- 6. 现金滚动 ----------
+    # ---------- 6. 贷款（先息后本）----------
+    # 放款月注入现金；每满 12 个月结一年利息（amount×rate）；到期月补结不足一年的
+    # 零头利息并一次性还本。负债余额=贷款存续期间的未还本金，还本当月归零。
+    idx = {pp: j for j, pp in enumerate(periods)}
+    loan_in = [zero] * n
+    loan_int = [zero] * n
+    loan_repay = [zero] * n
+    loan_bal = [zero] * n
+    for ln in (p.loans or []):
+        start = idx.get(ln.get("period"))
+        amt = Decimal(str(ln.get("amount") or 0))
+        rate = Decimal(str(ln.get("rate") or 0))
+        term = int(ln.get("term_months") or 0)
+        if start is None or amt <= 0 or term <= 0:
+            continue
+        loan_in[start] += amt
+        maturity = start + term
+        monthly = amt * rate / 12
+        # 存续期未还本金：放款月至到期前一月余额=amt（到期月还本后为 0）
+        for m in range(start, min(maturity, n)):
+            loan_bal[m] += amt
+        # 结息：每满 12 个月一结，到期月补结零头利息
+        last_settle = start
+        for m in range(start + 1, min(maturity, n - 1) + 1):
+            if ((m - start) % 12 == 0 or m == maturity):
+                loan_int[m] += monthly * (m - last_settle)
+                last_settle = m
+        if maturity <= n - 1:
+            loan_repay[maturity] += amt   # 到期一次性还本
+    # ---------- 7. 现金滚动 ----------
     cash_open = [zero] * n
     cash_close = [zero] * n
     financing = [inp(CASH_FINANCING, i) for i in range(n)]  # 投融资注入（不摊分）
-    cash_exp = [exp_total[i] + pur_total[i] for i in range(n)]
+    cash_exp = [exp_total[i] + pur_total[i] + loan_int[i] + loan_repay[i] for i in range(n)]
     cash_gap = [col_total[i] - cash_exp[i] for i in range(n)]
     cash_open[0] = inp(CASH_OPEN, 0)
     for i in range(n):
-        cash_close[i] = cash_open[i] + cash_gap[i] + financing[i]
+        cash_close[i] = cash_open[i] + cash_gap[i] + financing[i] + loan_in[i]
         if i + 1 < n:
             cash_open[i + 1] = cash_close[i]
 
@@ -409,6 +449,8 @@ def run(periods: list[str], params: Params,
         CASH_OPEN: cash_open, CASH_IN: col_total, CASH_EXP: cash_exp,
         CASH_GAP: cash_gap,
         CASH_CLOSE: cash_close, EXPENSE_TOTAL: exp_total,
+        LOAN_IN: loan_in, LOAN_INTEREST: loan_int,
+        LOAN_REPAY: loan_repay, LOAN_BALANCE: loan_bal,
     }
     # 输入行直接透传；qty 与费用行用处理后的值覆盖
     # （CASH_OPEN 同时属于 INPUT_ROWS 与 COMPUTED_ROWS，此处透传的静态期初链

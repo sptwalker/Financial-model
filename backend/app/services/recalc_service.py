@@ -37,8 +37,8 @@ def _coerce_params(data: dict) -> dict:
     """把参数 dict 的数值字段转 Decimal；list 字段逐元素转（回款权重等）；purchase_term_days 保持 int"""
     out = {}
     for k, v in data.items():
-        if k == "financing_rounds":
-            out[k] = v  # 轮次元数据 [{name, period, amount}]：引擎不读，原样透传
+        if k in ("financing_rounds", "loans"):
+            out[k] = v  # 元数据 list[dict]（轮次/贷款）：不逐元素转 Decimal，原样透传
         elif isinstance(v, list):
             out[k] = [_coerce_decimal(x) for x in v]
         elif isinstance(v, bool):
