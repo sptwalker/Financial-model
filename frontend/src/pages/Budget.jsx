@@ -542,8 +542,10 @@ function LoanSection({ periods, loans, setLoans, preview }) {
             </select>
             <NumInput value={l.amount ?? ''} placeholder="金额"
               onCommit={(v) => setLoan(i, { amount: v })} />
-            <NumInput value={l.rate ?? ''} placeholder="年利率%"
+            <span className="fin-unit">万元</span>
+            <NumInput value={l.rate ?? ''} placeholder="年利率"
               onCommit={(v) => setLoan(i, { rate: v })} />
+            <span className="fin-unit">%</span>
             <NumInput value={l.term_months ?? ''} placeholder="期限(月)"
               onCommit={(v) => setLoan(i, { term_months: v })} />
             <button className="fin-round-del" title="删除" onClick={() => removeLoan(i)}>×</button>
