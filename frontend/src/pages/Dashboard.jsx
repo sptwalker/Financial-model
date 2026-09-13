@@ -202,14 +202,14 @@ export default function Dashboard({ user, onLogout }) {
         },
       }))
     return {
-      tooltip: { trigger: 'axis', valueFormatter: (v) => fmt(v, 2) },
+      tooltip: { trigger: 'axis', valueFormatter: (v) => `${fmt(v, 2)} 万元` },
       legend: { bottom: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },
       grid: { left: 44, right: 8, top: 12, bottom: 34, containLabel: true },
       xAxis: {
         type: 'category', data: labels,
         axisLabel: { fontSize: 9, interval: 5 },
       },
-      yAxis: { type: 'value', axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eee' } } },
+      yAxis: { type: 'value', name: '万元', nameTextStyle: { fontSize: 9, color: '#999' }, nameGap: 6, axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { color: '#eee' } } },
       series: [
         line('cash.incoming', '#4f8cff'),
         line('cash.expense', '#f54e5e'),
