@@ -153,8 +153,8 @@ body {
 .alert-line b { font-size: 15px; }
 .alert-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .alert-chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
-.alert-chip.gap { background: #fde8e8; color: var(--red); }
 .alert-chip.lowcash { background: #fff3e0; color: var(--orange); }
+.alert-chip.neutral { background: #eef1f4; color: #667; }
 
 /* ---------- 卡片 ---------- */
 .card {

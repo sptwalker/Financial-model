@@ -155,6 +155,14 @@ export default function Dashboard({ user, onLogout }) {
   // 现金流预警：资金缺口月 + 现金水位低于阈值月
   const alerts = useMemo(() => detectAlerts(grid, periods, minCash), [grid, periods, minCash])
   const alertSum = useMemo(() => summarizeAlerts(alerts), [alerts])
+  // 现金最紧张的 6 个月（按期末现金升序），健康时也给出前瞻
+  const tightest = useMemo(() => {
+    if (!grid || !periods.length) return []
+    return periods
+      .map((p) => ({ period: p, value: Number(grid.cells['cash.closing']?.[p]?.value ?? 0) }))
+      .sort((a, b) => a.value - b.value)
+      .slice(0, 6)
+  }, [grid, periods])
   const setThreshold = (v) => {
     const n = Number(v)
     const safe = Number.isFinite(n) ? n : 0
@@ -419,7 +427,16 @@ export default function Dashboard({ user, onLogout }) {
                 </div>
               </>
             ) : (
-              <p className="hint">全期期末现金均不低于 {fmt(minCash, 0)} 万元安全水位。</p>
+              <>
+                <p className="hint">全期期末现金均不低于 {fmt(minCash, 0)} 万元安全水位。现金最紧张的月份：</p>
+                <div className="alert-chips">
+                  {tightest.map((t) => (
+                    <span key={t.period} className="alert-chip neutral" title="期末现金">
+                      {t.period.slice(2)} 期末 {fmt(t.value, 0)}
+                    </span>
+                  ))}
+                </div>
+              </>
             )}
           </section>
 
