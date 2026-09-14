@@ -404,29 +404,22 @@ export default function Dashboard({ user, onLogout }) {
             </div>
             {alertSum.total ? (
               <>
-                {alertSum.gap && (
-                  <p className="alert-line gap">
-                    资金缺口 <b>{alertSum.gap.count}</b> 个月，最早 {alertSum.gap.first.slice(2)}，
-                    最深 {fmt(alertSum.gap.worst.value, 0)} 万（{alertSum.gap.worst.period.slice(2)}）
-                  </p>
-                )}
                 {alertSum.lowcash && (
                   <p className="alert-line lowcash">
-                    现金低于 {fmt(minCash, 0)} 万 <b>{alertSum.lowcash.count}</b> 个月，最早 {alertSum.lowcash.first.slice(2)}，
+                    期末现金低于 {fmt(minCash, 0)} 万水位 <b>{alertSum.lowcash.count}</b> 个月，最早 {alertSum.lowcash.first.slice(2)}，
                     最低 {fmt(alertSum.lowcash.worst.value, 0)} 万（{alertSum.lowcash.worst.period.slice(2)}）
                   </p>
                 )}
                 <div className="alert-chips">
                   {alerts.map((a, i) => (
-                    <span key={i} className={`alert-chip ${a.type}`}
-                      title={a.type === 'gap' ? '资金缺口' : '现金低于水位'}>
-                      {a.period.slice(2)} {a.type === 'gap' ? '缺口' : '低现金'} {fmt(a.value, 0)}
+                    <span key={i} className="alert-chip lowcash" title="期末现金低于水位">
+                      {a.period.slice(2)} 期末 {fmt(a.value, 0)}
                     </span>
                   ))}
                 </div>
               </>
             ) : (
-              <p className="hint">全期无资金缺口，期末现金均不低于 {fmt(minCash, 0)} 万元安全水位。</p>
+              <p className="hint">全期期末现金均不低于 {fmt(minCash, 0)} 万元安全水位。</p>
             )}
           </section>
 
