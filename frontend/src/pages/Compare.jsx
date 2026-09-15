@@ -201,13 +201,13 @@ export default function Compare() {
           return `销量 ${labels[qi]} · 研发 ${labels[ri]}<br/>${mtxMode === 'min' ? '全期最低' : mtxPeriods[mtxMonth]?.slice(2)}期末现金：<b>${v === '-' ? '—' : fmt(v, 0)}</b> 万`
         },
       },
-      grid: { left: 56, right: 14, top: 10, bottom: 48, containLabel: true },
-      xAxis: { type: 'category', data: labels, name: '研发成本', nameLocation: 'middle', nameGap: 30,
+      grid: { left: 64, right: 14, top: 16, bottom: 88, containLabel: true },
+      xAxis: { type: 'category', data: labels, name: '研发成本', nameLocation: 'middle', nameGap: 26,
         nameTextStyle: { fontSize: 10, color: '#999' }, axisLabel: { fontSize: 9 } },
-      yAxis: { type: 'category', data: labels, name: '销量', nameGap: 8,
+      yAxis: { type: 'category', data: labels, name: '销量', nameLocation: 'middle', nameGap: 40, nameRotate: 90,
         nameTextStyle: { fontSize: 10, color: '#999' }, axisLabel: { fontSize: 9 } },
       visualMap: {
-        min: dom.min, max: dom.max, calculable: true, orient: 'horizontal', left: 'center', bottom: 0,
+        min: dom.min, max: dom.max, calculable: true, orient: 'horizontal', left: 'center', bottom: 4,
         itemHeight: 80, textStyle: { fontSize: 9 },
         inRange: { color: ['#e5484d', '#f6bd16', '#00b578'] },  // 红(破水位)→黄(水位)→绿(安全)
       },
@@ -377,7 +377,7 @@ export default function Compare() {
                     </label>
                   )}
                 </div>
-                <Chart option={mtxOption} height={340} notMerge />
+                <Chart option={mtxOption} height={380} notMerge />
               </>
             ) : (
               <p className="hint" style={{ textAlign: 'center', padding: '20px 0' }}>
