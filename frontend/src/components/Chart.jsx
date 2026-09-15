@@ -1,16 +1,16 @@
 import React, { useEffect, useRef } from 'react'
 import * as echarts from 'echarts/core'
-import { BarChart, LineChart, TreemapChart, SankeyChart } from 'echarts/charts'
+import { BarChart, LineChart, TreemapChart, SankeyChart, HeatmapChart } from 'echarts/charts'
 import {
   GridComponent, TooltipComponent, LegendComponent, DataZoomComponent,
-  MarkLineComponent, MarkAreaComponent,
+  MarkLineComponent, MarkAreaComponent, VisualMapComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
 echarts.use([
-  BarChart, LineChart, TreemapChart, SankeyChart,
+  BarChart, LineChart, TreemapChart, SankeyChart, HeatmapChart,
   GridComponent, TooltipComponent, LegendComponent, DataZoomComponent,
-  MarkLineComponent, MarkAreaComponent,
+  MarkLineComponent, MarkAreaComponent, VisualMapComponent,
   CanvasRenderer,
 ])
 

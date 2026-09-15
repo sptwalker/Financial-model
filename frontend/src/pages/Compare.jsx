@@ -7,6 +7,16 @@ import {
   DEFAULT_OPTIMISTIC, DEFAULT_PESSIMISTIC, FACTOR_MAX, FACTOR_MIN,
   clampFactor, factorPct, scaleOverride, scenarioKind,
 } from '../scenario'
+import { buildOverride, buildExpenseInputs } from '../whatif'
+import { FACTORS, cellValue, colorDomain, pctLabel } from '../matrix'
+
+// 并发池：限流跑完全部任务（矩阵 49 次预览，避免一次性打满后端）
+// ponytail: 前端并发 6；网格更细/更慢时改后端一次算完整个矩阵
+async function runPool(tasks, limit) {
+  let i = 0
+  const worker = async () => { while (i < tasks.length) { const idx = i++; await tasks[idx]() } }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker))
+}
 
 // 情景对比页（阶段5 · P1-5）：同一存档点（version_no 横跨三情景）下，把
 // 中性/乐观/悲观并排比对。以中性为基线，非基线列显示 Δ 与高亮，一眼看清方案分歧。
@@ -45,6 +55,17 @@ export default function Compare() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const seq = useRef(0)                        // 预览请求序号，丢弃过期响应
+
+  // ===== 现金流矩阵（销量 × 研发） =====
+  const [mtxBase, setMtxBase] = useState(null)  // {params, grid} 基线情景快照，供系数叠加
+  const [mtx, setMtx] = useState(null)          // 二维数组 [qtyIdx][rdIdx] = closing[] | null
+  const [mtxBusy, setMtxBusy] = useState(0)     // 已完成格数（0=未跑）
+  const [mtxMode, setMtxMode] = useState('min') // 'min' 全期最低 | 'month' 指定月
+  const [mtxMonth, setMtxMonth] = useState(0)   // month 模式下的月份下标
+  const [minCash] = useState(() => {
+    const v = Number(localStorage.getItem('fm_min_cash'))
+    return Number.isFinite(v) ? v : 0
+  })
 
   useEffect(() => {
     (async () => {
@@ -117,6 +138,85 @@ export default function Compare() {
   }, [grids])
 
   const baseId = scenarios[0]?.id
+
+  // 矩阵基线：拉基线情景的快照参数 + 基线网格（研发费用系数需按网格 exp.* 行缩放）
+  useEffect(() => {
+    if (!baseId) return
+    let stale = false
+    ;(async () => {
+      try {
+        const { params } = await getVersions(baseId)
+        const grid = await previewRecalc(baseId, {})
+        if (!stale) { setMtxBase({ params: params || {}, grid }); setMtx(null); setMtxBusy(0) }
+      } catch { /* 矩阵是可选功能，基线拉取失败则不显示，不打断主对比 */ }
+    })()
+    return () => { stale = true }
+  }, [baseId])
+
+  const mtxPeriods = useMemo(() => gridPeriods(mtxBase?.grid), [mtxBase])
+
+  // 跑矩阵：qty × rd 笛卡尔积各重算一次，取 cash.closing 全期序列。并发限流 + seq 守卫。
+  const runMatrix = async () => {
+    if (!mtxBase) return
+    const mySeq = ++seq.current
+    const grid = Array.from({ length: FACTORS.length }, () => Array(FACTORS.length).fill(null))
+    setMtx(null); setMtxBusy(0); setError(null)
+    let done = 0
+    const tasks = []
+    for (let qi = 0; qi < FACTORS.length; qi++) {
+      for (let ri = 0; ri < FACTORS.length; ri++) {
+        tasks.push(async () => {
+          const override = buildOverride(mtxBase.params, { qtyFactor: FACTORS[qi] })
+          const inputs = buildExpenseInputs(mtxBase.grid, { rdFactor: FACTORS[ri] })
+          try {
+            const g = await previewRecalc(baseId, inputs ? { params: override, inputs } : { params: override })
+            grid[qi][ri] = mtxPeriods.map((p) => Number(g.cells['cash.closing']?.[p]?.value ?? 0))
+          } catch { grid[qi][ri] = null }
+          if (mySeq === seq.current) setMtxBusy(++done)
+        })
+      }
+    }
+    await runPool(tasks, 6)
+    if (mySeq === seq.current) setMtx(grid)
+  }
+
+  // 矩阵热力图 option：x=研发系数、y=销量系数，色=按模式取的期末现金；水位居中红↔绿
+  const mtxOption = useMemo(() => {
+    if (!mtx) return {}
+    const data = []
+    const vals = []
+    for (let qi = 0; qi < FACTORS.length; qi++) {
+      for (let ri = 0; ri < FACTORS.length; ri++) {
+        const v = cellValue(mtx[qi][ri], mtxMode, mtxMonth)
+        if (v != null) vals.push(v)
+        data.push([ri, qi, v == null ? '-' : Math.round(v)])
+      }
+    }
+    const dom = colorDomain(vals, minCash)
+    const labels = FACTORS.map(pctLabel)
+    return {
+      tooltip: {
+        formatter: (p) => {
+          const [ri, qi, v] = p.data
+          return `销量 ${labels[qi]} · 研发 ${labels[ri]}<br/>${mtxMode === 'min' ? '全期最低' : mtxPeriods[mtxMonth]?.slice(2)}期末现金：<b>${v === '-' ? '—' : fmt(v, 0)}</b> 万`
+        },
+      },
+      grid: { left: 56, right: 14, top: 10, bottom: 48, containLabel: true },
+      xAxis: { type: 'category', data: labels, name: '研发成本', nameLocation: 'middle', nameGap: 30,
+        nameTextStyle: { fontSize: 10, color: '#999' }, axisLabel: { fontSize: 9 } },
+      yAxis: { type: 'category', data: labels, name: '销量', nameGap: 8,
+        nameTextStyle: { fontSize: 10, color: '#999' }, axisLabel: { fontSize: 9 } },
+      visualMap: {
+        min: dom.min, max: dom.max, calculable: true, orient: 'horizontal', left: 'center', bottom: 0,
+        itemHeight: 80, textStyle: { fontSize: 9 },
+        inRange: { color: ['#e5484d', '#f6bd16', '#00b578'] },  // 红(破水位)→黄(水位)→绿(安全)
+      },
+      series: [{
+        type: 'heatmap', data,
+        label: { show: true, fontSize: 8, formatter: (p) => (p.data[2] === '-' ? '' : fmt(p.data[2], 0)) },
+      }],
+    }
+  }, [mtx, mtxMode, mtxMonth, mtxPeriods, minCash])
 
   // 期末现金轨迹：三情景各一条线
   const cashOption = useMemo(() => {
@@ -247,6 +347,43 @@ export default function Compare() {
           <section className="card">
             <h2>期末现金轨迹</h2>
             <Chart option={cashOption} height={300} />
+          </section>
+
+          <section className="card">
+            <div className="budget-sec-head">
+              <h2>现金流矩阵（销量 × 研发）</h2>
+              <button className="link-btn" onClick={runMatrix} disabled={!mtxBase || (mtxBusy > 0 && mtxBusy < 49)}>
+                {mtxBusy > 0 && mtxBusy < 49 ? `测算中 ${mtxBusy}/49` : mtx ? '重新测算' : '开始测算'}
+              </button>
+            </div>
+            <p className="hint">
+              销量、研发成本各 ±30%（10% 一档）交错成 49 格，色 = 期末现金（红破 {fmt(minCash, 0)} 万水位 → 绿安全）。以「{scenarios[0]?.name || '中性'}」为基线，实时预览不写库。
+            </p>
+            {mtx ? (
+              <>
+                <div className="coef-grid" style={{ marginBottom: 8 }}>
+                  <label className="coef-item">
+                    <span className="coef-label">视角</span>
+                    <select value={mtxMode} onChange={(e) => setMtxMode(e.target.value)}>
+                      <option value="min">全期最低</option>
+                      <option value="month">指定月</option>
+                    </select>
+                  </label>
+                  {mtxMode === 'month' && (
+                    <label className="coef-item" style={{ flex: 1 }}>
+                      <span className="coef-label">{mtxPeriods[mtxMonth]?.slice(2) || ''}</span>
+                      <input type="range" min={0} max={mtxPeriods.length - 1} step={1} value={mtxMonth}
+                        onChange={(e) => setMtxMonth(Number(e.target.value))} style={{ flex: 1 }} />
+                    </label>
+                  )}
+                </div>
+                <Chart option={mtxOption} height={340} notMerge />
+              </>
+            ) : (
+              <p className="hint" style={{ textAlign: 'center', padding: '20px 0' }}>
+                {mtxBusy > 0 ? `测算中 ${mtxBusy}/49…` : '点「开始测算」跑 49 格组合（约需数秒）'}
+              </p>
+            )}
           </section>
         </>
       ) : (
